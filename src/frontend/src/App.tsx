@@ -53,12 +53,15 @@ import {
   ArrowLeft,
   Bold,
   Bot,
+  Bookmark,
   Braces,
   Check,
   Copy,
+  CornerUpRight,
   Download,
   Eraser,
   ExternalLink,
+  Flag,
   Heading2,
   Eye,
   FileText,
@@ -88,6 +91,8 @@ import {
   Settings,
   Sparkles,
   Table as TableIcon,
+  ThumbsDown,
+  ThumbsUp,
   Trash2,
   Undo2,
   UserPlus,
@@ -98,6 +103,7 @@ import {
   Languages,
   CircleHelp,
   ChartColumn,
+  Volume2,
 } from 'lucide-react'
 import './App.css'
 
@@ -1685,8 +1691,55 @@ function App() {
       showToast(error instanceof Error ? error.message : '保存资产失败')
     }
   }
+
+  const getMessagePlainText = (message: Message) => stripReferenceSections(stripImagePrompts(cleanArticleContent(message.content))).trim()
+
+  const copyMessageContent = async (message: Message) => {
+    const text = getMessagePlainText(message)
+    if (!text) {
+      showToast('这条消息暂无可复制内容')
+      return
+    }
+    const copied = await copyText(text)
+    showToast(copied ? '消息已复制' : '当前浏览器不支持直接复制')
+  }
+
+  const speakMessageContent = (message: Message) => {
+    const text = getMessagePlainText(message)
+    if (!text) {
+      showToast('这条消息暂无可朗读内容')
+      return
+    }
+    if (!('speechSynthesis' in window)) {
+      showToast('当前浏览器不支持朗读')
+      return
+    }
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(text.slice(0, 2000))
+    utterance.lang = 'zh-CN'
+    window.speechSynthesis.speak(utterance)
+    showToast('开始朗读')
+  }
+
+  const markMessageFeedback = (message: Message, value: 'up' | 'down') => {
+    setMessageFeedback((current) => ({ ...current, [message.id]: value }))
+    showToast(value === 'up' ? '已记录：有帮助' : '已记录：需要改进')
+  }
+
+  const askFollowupFromMessage = (message: Message) => {
+    setOpenMessageMenuId(null)
+    setDraft(`请基于上面这条回答继续展开：\n\n${getMessagePlainText(message).slice(0, 800)}\n\n我的追问是：`)
+  }
+
+  const reportMessage = (message: Message) => {
+    setOpenMessageMenuId(null)
+    setMessageFeedback((current) => ({ ...current, [message.id]: 'down' }))
+    showToast('已标记反馈，后续会接入后台反馈记录')
+  }
   const [copyFeedback, setCopyFeedback] = useState('')
   const [copyTitleFeedback, setCopyTitleFeedback] = useState('')
+  const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null)
+  const [messageFeedback, setMessageFeedback] = useState<Record<number, 'up' | 'down'>>({})
   const [showShareModal, setShowShareModal] = useState(false)
   const [shareExpiry, setShareExpiry] = useState('24h')
   const [shareUrl, setShareUrl] = useState('')
@@ -2249,6 +2302,67 @@ function App() {
         </div>
         {message.role === 'assistant' && !isGeneratingImageMessage(message) && !isMessageGenerating(message) && renderReferencePanel(referenceContent)}
       </>
+    )
+  }
+
+  const renderMessageActions = (message: Message) => {
+    if (isMessageGenerating(message)) return null
+    const isAssistant = message.role === 'assistant'
+    const feedback = messageFeedback[message.id]
+
+    return (
+      <div className="message-action-row" aria-label="消息操作">
+        <button type="button" title="复制" onClick={() => void copyMessageContent(message)}>
+          <Copy size={16} />
+        </button>
+        {isAssistant && (
+          <>
+            <button type="button" title="朗读" onClick={() => speakMessageContent(message)}>
+              <Volume2 size={16} />
+            </button>
+            <button className={feedback === 'up' ? 'active' : ''} type="button" title="有帮助" onClick={() => markMessageFeedback(message, 'up')}>
+              <ThumbsUp size={16} />
+            </button>
+            <button className={feedback === 'down' ? 'active' : ''} type="button" title="需要改进" onClick={() => markMessageFeedback(message, 'down')}>
+              <ThumbsDown size={16} />
+            </button>
+          </>
+        )}
+        <button type="button" title={isAssistant ? '追问' : '重新生成'} onClick={() => isAssistant ? askFollowupFromMessage(message) : void retryFromMessage(message)} disabled={!isAssistant && isStreaming}>
+          {isAssistant ? <CornerUpRight size={16} /> : <RotateCcw size={16} />}
+        </button>
+        {isAssistant && (
+          <div className="message-more-wrap">
+            <button className={openMessageMenuId === message.id ? 'active' : ''} type="button" title="更多" onClick={() => setOpenMessageMenuId((current) => current === message.id ? null : message.id)}>
+              <MoreHorizontal size={16} />
+            </button>
+            {openMessageMenuId === message.id && (
+              <div className="message-more-menu">
+                <button type="button" onClick={() => { setOpenMessageMenuId(null); openEditor(message) }}>
+                  <PanelRightOpen size={16} />
+                  转为文档编辑
+                </button>
+                <button type="button" onClick={() => { setOpenMessageMenuId(null); void saveArticleAsset(message) }}>
+                  <Bookmark size={16} />
+                  保存到资产库
+                </button>
+                <button type="button" onClick={() => { setOpenMessageMenuId(null); void downloadMessageExport(message, 'docx') }}>
+                  <FileText size={16} />
+                  导出 DOCX
+                </button>
+                <button type="button" onClick={() => { setOpenMessageMenuId(null); void downloadMessageExport(message, 'pptx') }}>
+                  <Presentation size={16} />
+                  导出 PPT
+                </button>
+                <button type="button" onClick={() => reportMessage(message)}>
+                  <Flag size={16} />
+                  反馈与举报
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -3296,6 +3410,7 @@ function App() {
                 ) : (
                   renderTextMessage(message)
                 )}
+                {renderMessageActions(message)}
               </div>
             </article>
           ))}
