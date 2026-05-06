@@ -65,6 +65,10 @@ public sealed partial class OfficeExportService : IOfficeExportService
             {
                 var slidePart = presentationPart.AddNewPart<SlidePart>();
                 slidePart.Slide = CreateSlide(slide.Title, slide.Items, slide.IsCover);
+                if (!string.IsNullOrWhiteSpace(slide.Notes))
+                {
+                    AddNotesSlide(slidePart, slide.Notes);
+                }
                 slidePart.Slide.Save();
                 slideIdList.Append(new P.SlideId { Id = id++, RelationshipId = presentationPart.GetIdOfPart(slidePart) });
             }
@@ -107,6 +111,23 @@ public sealed partial class OfficeExportService : IOfficeExportService
         return new P.Slide(new P.CommonSlideData(shapeTree), new P.ColorMapOverride(new A.MasterColorMapping()));
     }
 
+    private static void AddNotesSlide(SlidePart slidePart, string notes)
+    {
+        var notesPart = slidePart.AddNewPart<NotesSlidePart>();
+        var shapeTree = new P.ShapeTree(
+            new P.NonVisualGroupShapeProperties(
+                new P.NonVisualDrawingProperties { Id = 1, Name = "" },
+                new P.NonVisualGroupShapeDrawingProperties(),
+                new P.ApplicationNonVisualDrawingProperties()),
+            new P.GroupShapeProperties(new A.TransformGroup()));
+
+        shapeTree.Append(CreateTextShape(2, "Notes", notes, 680000, 700000, 11200000, 5200000, 1600, false, false));
+        notesPart.NotesSlide = new P.NotesSlide(
+            new P.CommonSlideData(shapeTree),
+            new P.ColorMapOverride(new A.MasterColorMapping()));
+        notesPart.NotesSlide.Save();
+    }
+
     private static P.Shape CreateTextShape(uint id, string name, string text, long x, long y, long cx, long cy, int fontSize, bool bold, bool bullet)
     {
         var paragraphs = text.Split('\n', StringSplitOptions.RemoveEmptyEntries)
@@ -145,37 +166,53 @@ public sealed partial class OfficeExportService : IOfficeExportService
     private static IReadOnlyList<SlideDraft> BuildSlides(string title, string markdown)
     {
         var blocks = ParseBlocks(markdown).Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
-        var slides = new List<SlideDraft> { new(title, ["Generated from VeraMedia"], true) };
+        var slides = new List<SlideDraft> { new(title, ["Generated from VeraMedia"], "", true) };
         var currentTitle = title;
         var currentItems = new List<string>();
+        var currentNotes = new List<string>();
 
         foreach (var block in blocks)
         {
             if (block.Level is > 0)
             {
-                AddSlide(slides, currentTitle, currentItems);
+                AddSlide(slides, currentTitle, currentItems, currentNotes);
                 currentTitle = block.Text;
                 currentItems = [];
+                currentNotes = [];
+                continue;
+            }
+
+            if (IsNotesLine(block.Text, out var notes))
+            {
+                currentNotes.Add(notes);
                 continue;
             }
 
             currentItems.Add(block.Text);
             if (currentItems.Count >= 5)
             {
-                AddSlide(slides, currentTitle, currentItems);
+                AddSlide(slides, currentTitle, currentItems, currentNotes);
                 currentTitle = "Continued: " + currentTitle;
                 currentItems = [];
+                currentNotes = [];
             }
         }
 
-        AddSlide(slides, currentTitle, currentItems);
-        return slides.Take(12).ToList();
+        AddSlide(slides, currentTitle, currentItems, currentNotes);
+        return slides.Take(36).ToList();
     }
 
-    private static void AddSlide(List<SlideDraft> slides, string title, List<string> items)
+    private static void AddSlide(List<SlideDraft> slides, string title, List<string> items, List<string> notes)
     {
         if (items.Count == 0) return;
-        slides.Add(new SlideDraft(title, items.Select(ClampSlideText).ToList(), false));
+        slides.Add(new SlideDraft(title, items.Select(ClampSlideText).ToList(), string.Join("\n", notes.Select(CleanInline)), false));
+    }
+
+    private static bool IsNotesLine(string text, out string notes)
+    {
+        var match = Regex.Match(text, @"^(?:备注|旁白|演讲稿|配音稿|Speaker Notes?|Narration)\s*[:：]\s*(.+)$", RegexOptions.IgnoreCase);
+        notes = match.Success ? match.Groups[1].Value.Trim() : "";
+        return match.Success;
     }
 
     private static IReadOnlyList<MarkdownBlock> ParseBlocks(string markdown)
@@ -237,5 +274,5 @@ public sealed partial class OfficeExportService : IOfficeExportService
     private static partial Regex PrefixRegex();
 
     private sealed record MarkdownBlock(string Text, int Level, bool IsBullet);
-    private sealed record SlideDraft(string Title, IReadOnlyList<string> Items, bool IsCover);
+    private sealed record SlideDraft(string Title, IReadOnlyList<string> Items, string Notes, bool IsCover);
 }

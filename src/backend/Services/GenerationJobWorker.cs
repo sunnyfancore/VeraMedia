@@ -9,9 +9,12 @@ public sealed class GenerationJobWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<GenerationJobWorker> logger) : BackgroundService
 {
+    private const int MaxConcurrentJobs = 2;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await RequeueUnfinishedJobsAsync(stoppingToken);
+        using var concurrency = new SemaphoreSlim(MaxConcurrentJobs);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -25,6 +28,7 @@ public sealed class GenerationJobWorker(
                 break;
             }
 
+            await concurrency.WaitAsync(stoppingToken);
             _ = Task.Run(async () =>
             {
                 try
@@ -36,6 +40,10 @@ public sealed class GenerationJobWorker(
                 catch (Exception ex)
                 {
                     logger.LogError(ex, "Generation job {JobId} crashed.", jobId);
+                }
+                finally
+                {
+                    concurrency.Release();
                 }
             }, CancellationToken.None);
         }

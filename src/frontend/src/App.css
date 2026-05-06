@@ -1676,8 +1676,9 @@ button {
 }
 
 .provider-test-row .ghost-button {
-  min-height: 30px;
-  flex: 1 1 110px;
+  min-height: 32px;
+  flex: 1 1 96px;
+  padding: 0 8px;
 }
 
 .modal-backdrop {
@@ -2931,6 +2932,78 @@ button {
   gap: 8px;
 }
 
+.attachment-card {
+  position: relative;
+  width: 250px;
+  max-width: 100%;
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 8px;
+  border-radius: 12px;
+  padding: 8px;
+  color: #18181b;
+  background: #f4f4f5;
+}
+
+.attachment-thumb {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  color: #155eef;
+  background: #fff;
+}
+
+.attachment-thumb.image {
+  background: #111827;
+}
+
+.attachment-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-info {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.attachment-info strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-info span {
+  color: #8a8a8a;
+  font-size: 13px;
+}
+
+.attachment-card button {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #71717a;
+  background: transparent;
+}
+
+.attachment-card button:hover {
+  color: #18181b;
+  background: #e4e4e7;
+}
+
 .attachment-chip,
 .key-badge {
   min-height: 28px;
@@ -2975,7 +3048,7 @@ button {
 
 .account-panel label {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   font-weight: 700;
 }
 
@@ -4119,13 +4192,13 @@ button {
 
 .settings-drawer {
   position: relative;
-  width: min(380px, 100vw);
+  width: min(360px, 100vw);
   height: 100vh;
   overflow: auto;
   display: grid;
   align-content: start;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
   background: #f8fafc;
   border-left: 1px solid #dfe5ef;
   box-shadow: -24px 0 60px rgba(15, 23, 42, 0.12);
@@ -4137,18 +4210,18 @@ button {
   justify-content: space-between;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
-  padding: 10px;
+  padding: 8px 9px;
   background: #fff;
 }
 
 .drawer-head div {
   display: grid;
-  gap: 3px;
+  gap: 1px;
 }
 
 .drawer-head strong {
   color: #0f172a;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .drawer-head span {
@@ -4168,17 +4241,17 @@ button {
 
 .settings-card {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
-  padding: 10px;
+  padding: 9px 10px;
   background: #fff;
 }
 
 .settings-section-head {
   display: grid;
-  gap: 4px;
-  padding-bottom: 2px;
+  gap: 2px;
+  padding-bottom: 0;
 }
 
 .settings-section-head span {
@@ -4186,20 +4259,20 @@ button {
   align-items: center;
   gap: 6px;
   color: #101828;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 900;
 }
 
 .settings-section-head p {
   margin: 0;
   color: #667085;
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .settings-return {
   width: 100%;
-  min-height: 34px;
+  min-height: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -4208,6 +4281,35 @@ button {
   color: #175cd3;
   background: #eaf2ff;
   font-weight: 800;
+}
+
+.settings-drawer label {
+  gap: 4px;
+  font-size: 12px;
+}
+
+.settings-drawer input,
+.settings-drawer select,
+.settings-drawer textarea {
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.settings-drawer .ghost-button,
+.settings-drawer .primary-button {
+  min-height: 34px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.settings-drawer .key-badge {
+  min-height: 26px;
+  justify-content: flex-start;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .config-toggle {
@@ -5686,6 +5788,27 @@ button {
   padding: 22px 24px 24px;
 }
 
+.scroll-bottom-button {
+  position: fixed;
+  left: 50%;
+  bottom: 154px;
+  z-index: 18;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #111827;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.16);
+  transform: translateX(-50%);
+}
+
+.scroll-bottom-button:hover {
+  background: #f4f4f5;
+}
+
 .message {
   width: min(900px, 100%);
   gap: 12px;
@@ -6150,8 +6273,15 @@ button {
 }
 
 .brand-avatar.small {
-  width: 24px;
-  height: 24px;
+  width: 42px;
+  height: 42px;
+  color: #16468f;
+  background:
+    radial-gradient(circle at 72% 24%, rgba(255, 139, 176, 0.65) 0 18%, transparent 19%),
+    linear-gradient(135deg, #dbeafe 0%, #fce7f3 100%);
+  font-size: 16px;
+  font-weight: 850;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.84), 0 8px 18px rgba(47, 124, 255, 0.13);
 }
 
 .brand-chip strong {
@@ -6245,22 +6375,55 @@ button {
 }
 
 .sidebar-user {
-  min-height: 54px;
-  display: flex;
+  min-height: 78px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 30px;
   align-items: center;
-  gap: 8px;
-  margin-top: auto;
-  padding: 0 18px;
-  border-top: 1px solid #e9e9e9;
-  color: #27272a;
-  background: transparent;
-  font-size: 14px;
-  font-weight: 600;
+  gap: 12px;
+  margin: auto 12px 12px;
+  padding: 10px 11px;
+  border: 1px solid #eceff5;
+  border-radius: 16px;
+  color: #18181b;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.07);
   text-align: left;
 }
 
 .sidebar-user:hover {
+  border-color: #dbe7ff;
   background: #fff;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.1);
+}
+
+.sidebar-user-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.sidebar-user-copy strong {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 750;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-user-copy small {
+  color: #8a8f9c;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.sidebar-user > svg {
+  width: 30px;
+  height: 30px;
+  padding: 7px;
+  border-radius: 9px;
+  color: #71717a;
+  background: #f3f4f6;
 }
 
 .chat-pane:not(.editor-active) {
@@ -6439,6 +6602,14 @@ button {
   background: transparent;
 }
 
+.message-action-row > button.reference-toggle {
+  width: auto;
+  padding: 0 9px;
+  color: #737373;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
 .message-action-row > button:hover,
 .message-more-wrap > button:hover,
 .message-action-row > button.active,
@@ -6450,6 +6621,55 @@ button {
 .message-action-row > button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+.message-action-row > button.speech-action.active {
+  color: #1677ff;
+  background: #f1f6ff;
+}
+
+.speech-bars {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.speech-bars i {
+  width: 3px;
+  height: 8px;
+  border-radius: 999px;
+  background: #1677ff;
+  transform-origin: 50% 50%;
+  animation: speech-wave 0.78s ease-in-out infinite;
+}
+
+.speech-bars i:nth-child(2) {
+  height: 12px;
+  animation-delay: 0.12s;
+}
+
+.speech-bars i:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.speech-bars.paused i {
+  animation-play-state: paused;
+}
+
+@keyframes speech-wave {
+  0%,
+  100% {
+    transform: scaleY(0.58);
+    opacity: 0.62;
+  }
+
+  50% {
+    transform: scaleY(1.12);
+    opacity: 1;
+  }
 }
 
 .message-more-wrap {
@@ -6493,6 +6713,69 @@ button {
 
 .message-more-menu button:hover {
   background: #f5f5f5;
+}
+
+.thinking-mode-control {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.thinking-mode-chevron {
+  transition: transform 0.16s ease;
+}
+
+.thinking-mode-control .capability-button.active .thinking-mode-chevron {
+  transform: rotate(180deg);
+}
+
+.thinking-mode-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 14px);
+  z-index: 22;
+  width: 216px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 8px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.12);
+}
+
+.thinking-mode-menu button {
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #18181b;
+  background: transparent;
+  text-align: left;
+}
+
+.thinking-mode-menu button:hover,
+.thinking-mode-menu button.active {
+  background: #f4f4f5;
+}
+
+.thinking-mode-menu span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.thinking-mode-menu strong {
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.thinking-mode-menu small {
+  color: #8a8a8a;
+  font-size: 12px;
 }
 
 .composer {
@@ -6606,6 +6889,15 @@ button {
   background: rgba(21, 94, 239, 0.1);
 }
 
+.image-mode-chip small {
+  border-radius: 4px;
+  padding: 1px 4px;
+  color: #155eef;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
 .image-reference-button {
   cursor: pointer;
 }
@@ -6630,6 +6922,72 @@ button {
   background: transparent;
   font: inherit;
   cursor: pointer;
+}
+
+.toolbar-select {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.toolbar-select-trigger {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 10px;
+  padding: 0 10px;
+  color: #18181b;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.toolbar-select-trigger:hover,
+.toolbar-select-trigger.active {
+  background: #f4f4f5;
+}
+
+.toolbar-select-trigger strong {
+  min-width: 26px;
+  font-weight: 650;
+}
+
+.toolbar-select-menu {
+  position: fixed;
+  z-index: 26;
+  display: grid;
+  gap: 3px;
+  border: 1px solid #ececec;
+  border-radius: 12px;
+  padding: 6px;
+  background: #fff;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.13);
+  transform: translateX(-50%);
+}
+
+.toolbar-select-menu button {
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #18181b;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.toolbar-select-menu button:hover,
+.toolbar-select-menu button.active {
+  color: #155eef;
+  background: #edf4ff;
 }
 
 .capability-add:hover,
@@ -6694,15 +7052,6 @@ button {
 
 .send-circle:not(:disabled):hover {
   background: #e8e8e8 !important;
-}
-
-.attachment-row {
-  gap: 6px !important;
-}
-
-.attachment-chip {
-  border: 1px solid #ececec !important;
-  background: #fafafa !important;
 }
 
 @media (min-width: 1280px) {
@@ -6873,4 +7222,44 @@ button {
   .chat-pane.editor-active .rich-editor-content .tiptap {
     padding: 20px 18px 56px !important;
   }
+}
+
+/* Chat scroll correction: keep page chrome fixed and scroll only the message lane. */
+.workspace {
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+@supports (height: 100dvh) {
+  .workspace {
+    height: 100dvh !important;
+  }
+}
+
+.chat-pane:not(.editor-active) {
+  position: relative !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  grid-template-rows: 58px minmax(0, 1fr) auto !important;
+  overflow: hidden !important;
+}
+
+.chat-pane:not(.editor-active) > .messages {
+  min-height: 0 !important;
+  height: auto !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior: contain !important;
+}
+
+.chat-pane:not(.editor-active) > .composer {
+  flex: 0 0 auto !important;
+}
+
+.scroll-bottom-button {
+  position: absolute !important;
+  left: var(--composer-center-x, 50%) !important;
+  bottom: calc(var(--composer-height, 126px) + 14px) !important;
+  transform: translateX(-50%) !important;
 }

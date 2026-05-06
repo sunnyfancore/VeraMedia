@@ -24,6 +24,10 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\scripts\export-ppt-video.sh" Link="scripts\export-ppt-video.sh" CopyToPublishDirectory="Always" />
+  </ItemGroup>
+
   <Target Name="BuildFrontendAssets" AfterTargets="Build" Condition="'$(SkipFrontendBuild)' != 'true'">
     <Message Text="Building frontend and syncing files into wwwroot..." Importance="high" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCommand) ci" Condition="!Exists('$(SpaRoot)node_modules')" />

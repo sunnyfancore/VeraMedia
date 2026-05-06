@@ -217,7 +217,7 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
 
     private static string BuildSystemPrompt(AgentOptionsDto? options)
     {
-        options ??= new AgentOptionsDto("normal", "wechat", "article", 0.7m, 3, false, true);
+        options ??= new AgentOptionsDto("quick", "wechat", "article", 0.7m, 3, false, true);
         return string.Join(Environment.NewLine, [
             "你是 VeraMedia 的中文内容运营助手。你可以聊天答疑、理解需求、策划选题，也可以在用户明确需要时创作文章、文档或配图占位。",
             "",
@@ -290,6 +290,31 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
                 foreach (var item in request.Options.CapabilityParams)
                 {
                     builder.AppendLine($"- {item.Key}: {item.Value}");
+                }
+            }
+            if (string.Equals(request.Options.Capability, "ppt", StringComparison.OrdinalIgnoreCase))
+            {
+                var pptMode = request.Options.CapabilityParams?.GetValueOrDefault("pptMode") ?? "PPT";
+                var pages = request.Options.CapabilityParams?.GetValueOrDefault("pptPages") ?? "12页";
+                var narration = request.Options.CapabilityParams?.GetValueOrDefault("pptNarration") ?? "关闭";
+                builder.AppendLine();
+                builder.AppendLine("PPT 生成要求：");
+                builder.AppendLine($"- 目标页数：{pages}，请尽量按该页数规划章节和页面。");
+                if (string.Equals(pptMode, "PPT视频", StringComparison.OrdinalIgnoreCase))
+                {
+                    builder.AppendLine("- 输出适合制作成 PPT 视频的 Markdown 方案。");
+                    builder.AppendLine("- 按页拆分，每页使用二级标题作为页标题，并包含页面要点、视觉/动画建议、建议时长。");
+                    builder.AppendLine("- 每页必须包含一行“备注：...”或“旁白：...”，用于写入 PPT 备注区和生成音频。");
+                    builder.AppendLine("- 给出整支视频的结构节奏、开场、转场和收尾。");
+                    if (string.Equals(narration, "开启", StringComparison.OrdinalIgnoreCase))
+                    {
+                        builder.AppendLine("- “备注/旁白”内容就是可直接配音的演讲稿，语气自然，适合音频朗读。");
+                        builder.AppendLine("- 旁白稿要控制口播节奏，并标注建议语速、停顿和情绪。");
+                    }
+                }
+                else
+                {
+                    builder.AppendLine("- 输出适合导出为 PPT 的 Markdown 大纲，每页结构清晰，标题短，页面要点精炼。");
                 }
             }
             builder.AppendLine("请严格按照当前能力模式和能力参数处理用户需求。");

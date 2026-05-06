@@ -61,9 +61,10 @@ public sealed class OpenAiCompatibleChatClient(HttpClient httpClient, IHttpConte
             ["temperature"] = (double)(options?.Temperature ?? 0.7m),
             ["messages"] = turns.Select(x => new { role = x.Role, content = x.Content }).ToArray()
         };
-        if (options?.ThinkingMode == "deep")
+        var reasoningEffort = ResolveReasoningEffort(options);
+        if (reasoningEffort is not null)
         {
-            payload["reasoning_effort"] = "high";
+            payload["reasoning_effort"] = reasoningEffort;
         }
 
         request.Content = JsonContent.Create(payload);
@@ -123,11 +124,12 @@ public sealed class OpenAiCompatibleChatClient(HttpClient httpClient, IHttpConte
             ["temperature"] = (double)(options?.Temperature ?? 0.7m)
         };
 
-        if (options?.ThinkingMode == "deep")
+        var reasoningEffort = ResolveReasoningEffort(options);
+        if (reasoningEffort is not null)
         {
             payload["reasoning"] = new
             {
-                effort = "high"
+                effort = reasoningEffort
             };
         }
 
@@ -165,6 +167,17 @@ public sealed class OpenAiCompatibleChatClient(HttpClient httpClient, IHttpConte
         {
             yield return "\n\n---\n\n## 参考来源\n" + string.Join("\n", sources.Select(x => $"{x.Key}. {x.Value}"));
         }
+    }
+
+    private static string? ResolveReasoningEffort(AgentOptionsDto? options)
+    {
+        return options?.ThinkingMode?.Trim().ToLowerInvariant() switch
+        {
+            "quick" or "normal" => "low",
+            "think" or "deep" => "high",
+            "expert" => "xhigh",
+            _ => null
+        };
     }
 
     private static string? TryReadChatDelta(string json)

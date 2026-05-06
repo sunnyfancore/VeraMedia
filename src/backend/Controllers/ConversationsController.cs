@@ -1,4 +1,5 @@
-﻿using System.Text;
+using System.Text;
+using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -63,10 +64,99 @@ public sealed class ConversationsController(
         }
 
         var title = message.Conversation?.Title ?? "VeraMedia";
+        if (string.Equals(format, "mp4", StringComparison.OrdinalIgnoreCase))
+        {
+            var video = await CreatePptVideoAsync(title, message.Content, cancellationToken);
+            return File(video.Content, video.ContentType, video.FileName);
+        }
+
         var file = string.Equals(format, "pptx", StringComparison.OrdinalIgnoreCase)
             ? officeExportService.CreatePptx(title, message.Content)
             : officeExportService.CreateDocx(title, message.Content);
         return File(file.Content, file.ContentType, file.FileName);
+    }
+
+    private async Task<OfficeExportFile> CreatePptVideoAsync(string title, string markdown, CancellationToken cancellationToken)
+    {
+        var converter = ResolvePptVideoConverter();
+        if (converter is null)
+        {
+            throw new InvalidOperationException("当前环境未安装 PPT 转视频工具。请确认容器内存在 export-ppt-video。");
+        }
+
+        var pptx = officeExportService.CreatePptx(title, markdown);
+        var workDir = Path.Combine(Path.GetTempPath(), "veramedia-ppt-video", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workDir);
+        try
+        {
+            var pptxPath = Path.Combine(workDir, pptx.FileName);
+            await System.IO.File.WriteAllBytesAsync(pptxPath, pptx.Content, cancellationToken);
+
+            var outputDir = Path.Combine(workDir, "video");
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = converter,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false
+            };
+            startInfo.ArgumentList.Add(pptxPath);
+            startInfo.ArgumentList.Add(outputDir);
+            startInfo.ArgumentList.Add("5");
+            startInfo.ArgumentList.Add("zh");
+
+            using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("无法启动 PPT 转视频工具。");
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+            var stdout = (await stdoutTask).Trim();
+            var stderr = (await stderrTask).Trim();
+
+            if (process.ExitCode != 0)
+            {
+                throw new InvalidOperationException(string.IsNullOrWhiteSpace(stderr) ? "PPT 转视频失败。" : stderr);
+            }
+
+            var videoPath = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).LastOrDefault();
+            if (string.IsNullOrWhiteSpace(videoPath) || !System.IO.File.Exists(videoPath))
+            {
+                videoPath = Directory.GetFiles(outputDir, "*.mp4", SearchOption.AllDirectories).FirstOrDefault();
+            }
+
+            if (string.IsNullOrWhiteSpace(videoPath) || !System.IO.File.Exists(videoPath))
+            {
+                throw new InvalidOperationException("PPT 转视频完成，但没有找到生成的视频文件。");
+            }
+
+            var bytes = await System.IO.File.ReadAllBytesAsync(videoPath, cancellationToken);
+            return new OfficeExportFile(BuildExportFileName(title, "mp4"), "video/mp4", bytes);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(workDir, recursive: true);
+            }
+            catch
+            {
+                // Best effort cleanup.
+            }
+        }
+    }
+
+    private static string? ResolvePptVideoConverter()
+    {
+        if (System.IO.File.Exists("/usr/local/bin/export-ppt-video")) return "/usr/local/bin/export-ppt-video";
+        var local = Path.Combine(AppContext.BaseDirectory, "scripts", "export-ppt-video.sh");
+        return System.IO.File.Exists(local) ? local : null;
+    }
+
+    private static string BuildExportFileName(string title, string extension)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var cleaned = new string(title.Where(ch => !invalid.Contains(ch)).ToArray()).Trim();
+        if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "VeraMedia";
+        return $"{cleaned[..Math.Min(cleaned.Length, 32)]}.{extension}";
     }
 
     [HttpDelete("{conversationId:long}")]
@@ -158,7 +248,7 @@ public sealed class ConversationsController(
                 return;
             }
 
-            await Task.Delay(500, cancellationToken);
+            await Task.Delay(1000, cancellationToken);
         }
     }
 
@@ -293,7 +383,7 @@ public sealed class ConversationsController(
         };
 
         var builder = new StringBuilder();
-        await foreach (var chunk in chatClient.StreamReplyAsync(provider, chatModel, turns, new AgentOptionsDto("normal", "wechat", "article", 0.4m, 0, false, false), cancellationToken))
+        await foreach (var chunk in chatClient.StreamReplyAsync(provider, chatModel, turns, new AgentOptionsDto("quick", "wechat", "article", 0.4m, 0, false, false), cancellationToken))
         {
             builder.Append(chunk);
         }
@@ -681,7 +771,12 @@ public sealed class ConversationsController(
     {
         var attachmentCount = request.Attachments?.Count ?? 0;
         var options = request.Options;
-        var thinking = options?.ThinkingMode == "deep" ? "深度思考已开启" : "普通模式";
+        var thinking = options?.ThinkingMode?.Trim().ToLowerInvariant() switch
+        {
+            "expert" => "专家思考已开启",
+            "think" or "deep" => "思考模式已开启",
+            _ => "快速模式"
+        };
         var search = options?.EnableWebSearch == true ? "智能搜索已开启" : "未开启智能搜索";
         return $"任务状态：{thinking}，{search}，附件 {attachmentCount} 个。";
     }
@@ -696,3 +791,4 @@ public sealed class ConversationsController(
         await SseResponseWriter.WriteAsync(Response, eventName, payload, cancellationToken);
     }
 }
+

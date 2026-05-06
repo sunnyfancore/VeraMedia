@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState, useCallback } from 'react'
-import type { ClipboardEvent, DragEvent, FormEvent, KeyboardEvent, ReactNode } from 'react'
+import type { ClipboardEvent, CSSProperties, DragEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { useLayoutEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -51,13 +51,15 @@ import './RichEditor.css'
 import {
   AlertTriangle,
   ArrowLeft,
+  ArrowDown,
   Bold,
   Bot,
   Bookmark,
   Braces,
   Check,
+  ChevronDown,
   Copy,
-  CornerUpRight,
+  Cpu,
   Download,
   Eraser,
   ExternalLink,
@@ -88,12 +90,11 @@ import {
   Settings,
   Sparkles,
   Table as TableIcon,
-  ThumbsDown,
-  ThumbsUp,
   Trash2,
   Undo2,
   UserPlus,
   Users,
+  Video,
   X,
   Zap,
   Languages,
@@ -114,9 +115,24 @@ const stylePresets = [
 
 type StylePreset = typeof stylePresets[number]['value']
 type CapabilityKey = 'quick' | 'write' | 'image' | 'code' | 'translate' | 'research' | 'qa' | 'data' | 'super' | 'ppt'
+type ThinkingMode = 'quick' | 'think' | 'expert'
+
+const thinkingModes: Array<{ key: ThinkingMode; label: string; description: string; icon: ReactNode }> = [
+  { key: 'quick', label: '快速', description: '适用于大部分情况', icon: <Zap size={17} /> },
+  { key: 'think', label: '思考', description: '擅长解决更难的问题', icon: <Cpu size={17} /> },
+  { key: 'expert', label: '专家', description: '研究级智能模型', icon: <Sparkles size={17} /> },
+] as const
+
+const thinkingModeLabels: Record<ThinkingMode, string> = {
+  quick: '快速',
+  think: '思考',
+  expert: '专家',
+}
+
+const isThinkingMode = (value: string): value is ThinkingMode =>
+  value === 'quick' || value === 'think' || value === 'expert'
 
 const primaryCapabilities: Array<{ key: CapabilityKey; label: string; icon: ReactNode }> = [
-  { key: 'quick', label: '快速', icon: <Zap size={17} /> },
   { key: 'write', label: '帮我写作', icon: <FileText size={17} /> },
   { key: 'image', label: '图像生成', icon: <ImagePlus size={17} /> },
   { key: 'code', label: '编程', icon: <Braces size={17} /> },
@@ -133,6 +149,10 @@ const moreCapabilities: Array<{ key: CapabilityKey; label: string; icon: ReactNo
 
 const imageRatios = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const
 const imageStyles = ['默认', '写实摄影', '商业海报', '插画', '3D 渲染', '国潮'] as const
+const targetLanguages = ['中文（简体）', '英文', '日文', '韩文', '西班牙文'] as const
+const pptPageOptions = ['6页', '8页', '10页', '12页', '15页', '20页', '25页', '30页'] as const
+const pptModeOptions = ['PPT', 'PPT视频'] as const
+const pptNarrationOptions = ['开启', '关闭'] as const
 const imageTemplates = [
   { value: 'none', label: '模板', prompt: '' },
   { value: 'cover', label: '封面图', prompt: '生成一张适合中文内容平台的封面图，主体明确，画面有传播感。' },
@@ -182,6 +202,62 @@ type ReferenceSource = {
   title: string
   url: string
   host: string
+}
+
+const acceptedAttachmentExtensions = [
+  '.png', '.jpg', '.jpeg', '.webp', '.gif',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.csv', '.ppt', '.pptx',
+  '.txt', '.md', '.json',
+  '.js', '.jsx', '.ts', '.tsx', '.py', '.cs', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.sql', '.html', '.css',
+]
+const acceptedAttachmentTypes = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'text/markdown',
+  'application/json',
+]
+const attachmentAccept = [...acceptedAttachmentTypes, ...acceptedAttachmentExtensions].join(',')
+const maxAttachmentSize = 10 * 1024 * 1024
+const maxAttachmentCount = 8
+const maxAttachmentTotalSize = 30 * 1024 * 1024
+
+const formatFileSize = (size: number) => {
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(size >= 10 * 1024 * 1024 ? 0 : 1)}MB`
+  if (size >= 1024) return `${Math.max(1, Math.round(size / 1024))}KB`
+  return `${size}B`
+}
+
+const getFileExtension = (fileName: string) => {
+  const index = fileName.lastIndexOf('.')
+  return index >= 0 ? fileName.slice(index).toLowerCase() : ''
+}
+
+const getAttachmentKind = (file: Pick<Attachment, 'fileName' | 'contentType'>) => {
+  const ext = getFileExtension(file.fileName)
+  if (file.contentType.startsWith('image/') || ['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext)) return 'Image'
+  if (ext === '.pdf' || file.contentType === 'application/pdf') return 'PDF'
+  if (['.doc', '.docx'].includes(ext)) return 'Word'
+  if (['.xls', '.xlsx', '.csv'].includes(ext)) return 'Sheet'
+  if (['.ppt', '.pptx'].includes(ext)) return 'PPT'
+  if (['.js', '.jsx', '.ts', '.tsx', '.py', '.cs', '.java', '.go', '.rs', '.c', '.cpp', '.h', '.sql', '.html', '.css'].includes(ext)) return 'Code'
+  if (['.txt', '.md', '.json'].includes(ext)) return 'Text'
+  return 'File'
+}
+
+const isSupportedAttachment = (file: File) => {
+  const ext = getFileExtension(file.name)
+  return acceptedAttachmentExtensions.includes(ext) || acceptedAttachmentTypes.includes(file.type)
 }
 
 const recommendedPromptConfig: AdminPromptConfig = {
@@ -284,7 +360,11 @@ function App() {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [uploadStatus, setUploadStatus] = useState('')
   const [isToolMenuOpen, setIsToolMenuOpen] = useState(false)
+  const [isThinkingMenuOpen, setIsThinkingMenuOpen] = useState(false)
+  const [openToolbarSelect, setOpenToolbarSelect] = useState<string | null>(null)
+  const [toolbarSelectPosition, setToolbarSelectPosition] = useState<{ left: number; bottom: number; minWidth: number } | null>(null)
   const [isComposerDragging, setIsComposerDragging] = useState(false)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
 
   const [activePage, setActivePage] = useState<'chat' | 'admin' | 'editor' | 'tasks' | 'assets' | 'images'>('chat')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -369,7 +449,7 @@ function App() {
   const [articleVersionsLoading, setArticleVersionsLoading] = useState(false)
   const [restoringVersionId, setRestoringVersionId] = useState<number | null>(null)
   const [agentOptions, setAgentOptions] = useState({
-    thinkingMode: 'normal',
+    thinkingMode: 'quick' as ThinkingMode,
     platform: 'wechat',
     outputFormat: 'article',
     temperature: 0.7,
@@ -392,22 +472,29 @@ function App() {
       researchDepth: '标准',
       qaMode: '逐步讲解',
       dataOutput: '洞察+表格',
-      pptPages: '8页',
+      pptPages: '12页',
       pptAudience: '商务汇报',
+      pptMode: 'PPT',
+      pptNarration: '开启',
     } as Record<string, string>,
   })
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const messagesRef = useRef<HTMLDivElement | null>(null)
+  const composerRef = useRef<HTMLFormElement | null>(null)
+  const chatPaneRef = useRef<HTMLElement | null>(null)
   const savedScrollRef = useRef<number | null>(null)
   const chatScrollTopRef = useRef<number | null>(null)
   const shouldRestoreChatScrollRef = useRef(false)
+  const shouldAnchorChatBottomRef = useRef(false)
+  const isChatAtBottomRef = useRef(true)
   const prevMessageCountRef = useRef(0)
   const richEditorRef = useRef<RichEditorHandle | null>(null)
   const sendingRef = useRef(false)
   const recoverRunningJobsRef = useRef<(id?: number | null) => void>(() => undefined)
   const ensureJobMessageRef = useRef<(job: GenerationJob) => void>(() => undefined)
   const connectGenerationJobRef = useRef<(job: GenerationJob) => void>(() => undefined)
+  const [composerMetrics, setComposerMetrics] = useState({ height: 126, centerX: 0 })
 
   useEffect(() => { conversationIdRef.current = conversationId }, [conversationId])
   useEffect(() => { previewMessageRef.current = previewMessage }, [previewMessage])
@@ -442,10 +529,72 @@ function App() {
   useEffect(() => {
     const added = messages.length > prevMessageCountRef.current
     prevMessageCountRef.current = messages.length
-    if (activePage === 'chat' && !isSettingsOpen && (added || isStreaming)) {
+    if (activePage === 'chat' && !isSettingsOpen && (added || isStreaming) && isChatAtBottomRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages, isStreaming, activePage, isSettingsOpen])
+
+  const updateChatBottomState = useCallback(() => {
+    const node = messagesRef.current
+    if (!node) return
+    const distance = node.scrollHeight - node.scrollTop - node.clientHeight
+    const atBottom = distance < 96
+    isChatAtBottomRef.current = atBottom
+    setShowScrollToBottom(!atBottom)
+  }, [])
+
+  useEffect(() => {
+    if (activePage !== 'chat') return
+    updateChatBottomState()
+  }, [activePage, messages.length, updateChatBottomState])
+
+  useEffect(() => {
+    if (activePage !== 'chat') return
+    const composerNode = composerRef.current
+    const paneNode = chatPaneRef.current
+    if (!composerNode || !paneNode) return
+
+    const update = () => {
+      const composerRect = composerNode.getBoundingClientRect()
+      const paneRect = paneNode.getBoundingClientRect()
+      const cardRect = composerNode.querySelector<HTMLElement>('.composer-card')?.getBoundingClientRect() ?? composerRect
+      const next = {
+        height: Math.ceil(composerRect.height),
+        centerX: Math.round(cardRect.left + cardRect.width / 2 - paneRect.left),
+      }
+      setComposerMetrics((current) => (
+        Math.abs(current.height - next.height) > 1 || Math.abs(current.centerX - next.centerX) > 1 ? next : current
+      ))
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(composerNode)
+    const cardNode = composerNode.querySelector<HTMLElement>('.composer-card')
+    if (cardNode) observer.observe(cardNode)
+    window.addEventListener('resize', update)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [activePage])
+
+  function scrollChatToBottom() {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    isChatAtBottomRef.current = true
+    setShowScrollToBottom(false)
+  }
+
+  const anchorChatToBottom = useCallback(() => {
+    const node = messagesRef.current
+    if (!node) return
+    node.scrollTop = node.scrollHeight
+    isChatAtBottomRef.current = true
+    setShowScrollToBottom(false)
+  }, [])
+
+  const requestAnchorChatToBottom = useCallback(() => {
+    shouldAnchorChatBottomRef.current = true
+  }, [])
 
   const rememberChatScroll = useCallback(() => {
     if (messagesRef.current) {
@@ -458,8 +607,21 @@ function App() {
   }, [])
 
   useLayoutEffect(() => {
+    if (activePage !== 'chat' || !shouldAnchorChatBottomRef.current) return
+    shouldAnchorChatBottomRef.current = false
+    anchorChatToBottom()
+    const frame = window.requestAnimationFrame(anchorChatToBottom)
+    const timers = [80, 260, 700].map((delay) => window.setTimeout(anchorChatToBottom, delay))
+    return () => {
+      window.cancelAnimationFrame(frame)
+      timers.forEach((timer) => window.clearTimeout(timer))
+    }
+  }, [activePage, messages.length, anchorChatToBottom])
+
+  useLayoutEffect(() => {
     if (activePage !== 'chat' || !shouldRestoreChatScrollRef.current) return
     shouldRestoreChatScrollRef.current = false
+    if (shouldAnchorChatBottomRef.current) return
     const scrollTop = chatScrollTopRef.current
     if (scrollTop === null) return
     window.requestAnimationFrame(() => {
@@ -554,10 +716,11 @@ function App() {
   }
 
   const loadMessages = useCallback(async (id: number) => {
+    requestAnchorChatToBottom()
     setConversationId(id)
     setMessages(await request<Message[]>(`/api/conversations/${id}/messages`))
     recoverRunningJobsRef.current(id)
-  }, [request])
+  }, [request, requestAnchorChatToBottom])
 
   const loadJobs = useCallback(async (status = jobStatusFilter) => {
     setJobsLoading(true)
@@ -670,9 +833,36 @@ function App() {
 
   async function uploadFiles(files: FileList | File[] | null) {
     if (!files?.length) return
+    const incoming = Array.from(files)
+    const remainingSlots = maxAttachmentCount - attachments.length
+    if (remainingSlots <= 0) {
+      showToast(`最多上传 ${maxAttachmentCount} 个附件`)
+      return
+    }
+
+    const supported = incoming.filter(isSupportedAttachment)
+    const rejectedTypeCount = incoming.length - supported.length
+    const sized = supported.filter((file) => file.size <= maxAttachmentSize)
+    const rejectedSizeCount = supported.length - sized.length
+    const selected = sized.slice(0, remainingSlots)
+    const currentTotal = attachments.reduce((sum, file) => sum + file.size, 0)
+    const accepted: File[] = []
+    let nextTotal = currentTotal
+    for (const file of selected) {
+      if (nextTotal + file.size > maxAttachmentTotalSize) break
+      accepted.push(file)
+      nextTotal += file.size
+    }
+
+    if (rejectedTypeCount > 0) showToast('已跳过不支持的文件格式')
+    if (rejectedSizeCount > 0) showToast(`单个附件不能超过 ${formatFileSize(maxAttachmentSize)}`)
+    if (sized.length > selected.length) showToast(`最多上传 ${maxAttachmentCount} 个附件`)
+    if (selected.length > accepted.length) showToast(`附件总大小不能超过 ${formatFileSize(maxAttachmentTotalSize)}`)
+    if (accepted.length === 0) return
+
     setUploadStatus('上传中...')
     try {
-      const uploaded = await uploadAttachments(files)
+      const uploaded = await uploadAttachments(accepted)
       setAttachments((current) => [...current, ...uploaded])
       setUploadStatus(`已上传 ${uploaded.length} 个文件。`)
     } catch (error) {
@@ -868,6 +1058,9 @@ function App() {
 
   async function openConversationFromSidebar(id: number) {
     savedScrollRef.current = null
+    chatScrollTopRef.current = null
+    shouldRestoreChatScrollRef.current = false
+    requestAnchorChatToBottom()
     setActivePage('chat')
     setIsSettingsOpen(false)
     setIsMobileNavOpen(false)
@@ -1010,15 +1203,19 @@ function App() {
     const source = draft.trim()
 
     setIsToolMenuOpen(false)
+    setIsThinkingMenuOpen(false)
     setAgentOptions((current) => {
       const next = { ...current, capability: key }
       if (key === 'quick') {
         next.intentMode = 'auto'
         next.outputFormat = 'article'
-        next.thinkingMode = 'normal'
+        next.thinkingMode = 'quick'
         next.enableWebSearch = true
       }
-      if (key === 'write') next.intentMode = 'article'
+      if (key === 'write') {
+        next.intentMode = 'article'
+        next.outputFormat = 'article'
+      }
       if (key === 'image') next.intentMode = 'image'
       if (key === 'code') next.intentMode = 'code' as IntentMode
       if (key === 'translate') next.intentMode = 'translate' as IntentMode
@@ -1028,10 +1225,15 @@ function App() {
       if (key === 'ppt') {
         next.intentMode = 'document'
         next.outputFormat = 'pptx'
+        next.capabilityParams = {
+          ...next.capabilityParams,
+          pptMode: next.capabilityParams.pptMode || 'PPT',
+          pptNarration: next.capabilityParams.pptNarration || '开启',
+        }
       }
       if (key === 'research' || key === 'super') {
         if (key === 'super') next.intentMode = 'document'
-        next.thinkingMode = 'deep'
+        next.thinkingMode = key === 'super' ? 'expert' : 'think'
         next.enableWebSearch = true
       }
       return next
@@ -1044,7 +1246,7 @@ function App() {
   }
 
   function leaveCapabilityMode() {
-    setAgentOptions((current) => ({ ...current, intentMode: 'auto', capability: 'quick', outputFormat: 'article', thinkingMode: 'normal', enableWebSearch: true }))
+    setAgentOptions((current) => ({ ...current, intentMode: 'auto', capability: 'quick', outputFormat: 'article', thinkingMode: 'quick', enableWebSearch: true }))
   }
 
   function updateCapabilityParam(key: string, value: string) {
@@ -1055,6 +1257,118 @@ function App() {
         [key]: value,
       },
     }))
+  }
+
+  function selectThinkingMode(mode: ThinkingMode) {
+    setIsThinkingMenuOpen(false)
+    setAgentOptions((current) => ({ ...current, thinkingMode: mode }))
+  }
+
+  function renderThinkingSelector() {
+    const mode = isThinkingMode(agentOptions.thinkingMode) ? agentOptions.thinkingMode : 'quick'
+    const selected = thinkingModes.find((item) => item.key === mode) ?? thinkingModes[0]
+
+    return (
+      <div className="thinking-mode-control">
+        <button
+          className={isThinkingMenuOpen ? 'capability-button active' : 'capability-button'}
+          type="button"
+          onClick={() => {
+            setIsToolMenuOpen(false)
+            setIsThinkingMenuOpen((value) => !value)
+          }}
+          title="选择思考层级"
+        >
+          {selected.icon}
+          {thinkingModeLabels[mode]}
+          <ChevronDown className="thinking-mode-chevron" size={15} />
+        </button>
+        {isThinkingMenuOpen && (
+          <div className="thinking-mode-menu">
+            {thinkingModes.map((item) => (
+              <button className={mode === item.key ? 'active' : ''} type="button" key={item.key} onClick={() => selectThinkingMode(item.key)}>
+                {item.icon}
+                <span>
+                  <strong>{item.label}</strong>
+                  <small>{item.description}</small>
+                </span>
+                {mode === item.key && <Check size={17} />}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  function renderToolbarSelect(
+    id: string,
+    value: string,
+    options: readonly (string | { value: string; label: string })[],
+    onChange: (value: string) => void,
+    icon?: ReactNode,
+    title?: string,
+  ) {
+    const isOpen = openToolbarSelect === id
+    const normalizedOptions = options.map((option) => typeof option === 'string' ? { value: option, label: option } : option)
+    const displayValue = normalizedOptions.find((option) => option.value === value)?.label ?? value
+    const openMenu = (event: ReactMouseEvent<HTMLButtonElement>) => {
+      const closing = openToolbarSelect === id
+      setIsToolMenuOpen(false)
+      setIsThinkingMenuOpen(false)
+      if (closing) {
+        setOpenToolbarSelect(null)
+        setToolbarSelectPosition(null)
+        return
+      }
+      const rect = event.currentTarget.getBoundingClientRect()
+      setToolbarSelectPosition({
+        left: Math.round(rect.left + rect.width / 2),
+        bottom: Math.round(window.innerHeight - rect.top + 10),
+        minWidth: Math.max(156, Math.round(rect.width + 44)),
+      })
+      setOpenToolbarSelect(id)
+    }
+
+    return (
+      <span className="toolbar-select" title={title}>
+        <button
+          className={isOpen ? 'toolbar-select-trigger active' : 'toolbar-select-trigger'}
+          type="button"
+          onClick={openMenu}
+        >
+          {icon}
+          <strong>{displayValue}</strong>
+          <ChevronDown size={15} />
+        </button>
+        {isOpen && (
+          <div
+            className="toolbar-select-menu"
+            style={toolbarSelectPosition ? ({
+              left: `${toolbarSelectPosition.left}px`,
+              bottom: `${toolbarSelectPosition.bottom}px`,
+              minWidth: `${toolbarSelectPosition.minWidth}px`,
+            } as CSSProperties) : undefined}
+          >
+            {normalizedOptions.map((option) => (
+              <button
+                className={option.value === value ? 'active' : ''}
+                type="button"
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value)
+                  setOpenToolbarSelect(null)
+                  setToolbarSelectPosition(null)
+                }}
+              >
+                <span>{option.label}</span>
+                {option.value === value && <Check size={15} />}
+              </button>
+            ))}
+          </div>
+        )}
+      </span>
+    )
   }
 
   function applyImageTemplate(value: string) {
@@ -1080,35 +1394,211 @@ function App() {
             参考图
             <input type="file" accept="image/*" multiple onChange={(e) => uploadFiles(e.target.files)} />
           </label>
-          <span className="image-select-wrap">
-            <Sparkles size={17} />
-            <select value={provider.imageModelName || '图像模型'} onChange={() => undefined} title="当前图像模型">
-              <option>{provider.imageModelName || '图像模型'}</option>
-            </select>
-          </span>
-          <span className="image-select-wrap">
-            <PanelRightOpen size={17} />
-            <select value={agentOptions.imageRatio} onChange={(e) => setAgentOptions({ ...agentOptions, imageRatio: e.target.value })} title="图片比例">
-              {imageRatios.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
-            </select>
-          </span>
-          <span className="image-select-wrap">
-            <CircleHelp size={17} />
-            <select value={agentOptions.imageStyle} onChange={(e) => setAgentOptions({ ...agentOptions, imageStyle: e.target.value })} title="图片风格">
-              {imageStyles.map((style) => <option key={style} value={style}>{style}</option>)}
-            </select>
-          </span>
-          <span className="image-select-wrap">
-            <ExternalLink size={17} />
-            <select value={agentOptions.imageTemplate} onChange={(e) => applyImageTemplate(e.target.value)} title="图片模板">
-              {imageTemplates.map((template) => <option key={template.value} value={template.value}>{template.label}</option>)}
-            </select>
-          </span>
+          {renderToolbarSelect(
+            'image-model',
+            provider.imageModelName || 'Seedream 4.5',
+            [provider.imageModelName || 'Seedream 4.5'],
+            () => undefined,
+            <Sparkles size={17} />,
+            '当前图像模型',
+          )}
+          {renderToolbarSelect(
+            'image-ratio',
+            agentOptions.imageRatio,
+            imageRatios,
+            (imageRatio) => setAgentOptions({ ...agentOptions, imageRatio }),
+            <PanelRightOpen size={17} />,
+            '图片比例',
+          )}
+          {renderToolbarSelect(
+            'image-style',
+            agentOptions.imageStyle,
+            imageStyles,
+            (imageStyle) => setAgentOptions({ ...agentOptions, imageStyle }),
+            <Sparkles size={17} />,
+            '图片风格',
+          )}
+          {renderToolbarSelect(
+            'image-template',
+            agentOptions.imageTemplate,
+            imageTemplates.map((template) => ({ value: template.value, label: template.label })),
+            applyImageTemplate,
+            undefined,
+            '图片模板',
+          )}
         </div>
       )
     }
 
     if (capability === 'quick') return null
+
+    if (capability === 'write') {
+      return (
+        <div className="capability-row image-tool-row" aria-label="帮我写作设置">
+          <span className="image-mode-chip">
+            <FileText size={17} />
+            帮我写作
+            <button type="button" title="退出帮我写作" onClick={leaveCapabilityMode}><X size={14} /></button>
+          </span>
+          {renderThinkingSelector()}
+          <label className="capability-button image-reference-button" title="上传文件">
+            <LinkIcon size={17} />
+            上传文件
+            <input type="file" accept={attachmentAccept} multiple onChange={(e) => uploadFiles(e.target.files)} />
+          </label>
+        </div>
+      )
+    }
+
+    if (capability === 'code') {
+      return (
+        <div className="capability-row image-tool-row" aria-label="编程设置">
+          <span className="image-mode-chip">
+            <Braces size={17} />
+            编程
+            <button type="button" title="退出编程" onClick={leaveCapabilityMode}><X size={14} /></button>
+          </span>
+          <label className="capability-button image-reference-button" title="上传文件">
+            <LinkIcon size={17} />
+            上传文件
+            <input type="file" accept={attachmentAccept} multiple onChange={(e) => uploadFiles(e.target.files)} />
+          </label>
+          <button className="capability-button" type="button" onClick={() => showToast('开源仓库导入功能准备中')}>
+            <Braces size={17} />
+            引入开源仓库
+          </button>
+          {renderThinkingSelector()}
+        </div>
+      )
+    }
+
+    if (capability === 'translate') {
+      return (
+        <div className="capability-row image-tool-row" aria-label="翻译设置">
+          <span className="image-mode-chip">
+            <Languages size={17} />
+            翻译
+            <button type="button" title="退出翻译" onClick={leaveCapabilityMode}><X size={14} /></button>
+          </span>
+          {renderToolbarSelect(
+            'target-language',
+            params.targetLanguage,
+            targetLanguages,
+            (value) => updateCapabilityParam('targetLanguage', value),
+            <Languages size={17} />,
+            '目标语言',
+          )}
+        </div>
+      )
+    }
+
+    if (capability === 'research') {
+      return (
+        <div className="capability-row image-tool-row" aria-label="深入研究设置">
+          <span className="image-mode-chip">
+            <Globe2 size={17} />
+            深入研究
+            <button type="button" title="退出深入研究" onClick={leaveCapabilityMode}><X size={14} /></button>
+          </span>
+        </div>
+      )
+    }
+
+    if (capability === 'qa') {
+      return (
+        <div className="capability-row image-tool-row" aria-label="解题答疑设置">
+          <span className="image-mode-chip">
+            <CircleHelp size={17} />
+            解题答疑
+            <button type="button" title="退出解题答疑" onClick={leaveCapabilityMode}><X size={14} /></button>
+          </span>
+          <label className="capability-button image-reference-button" title="上传题目图片">
+            <LinkIcon size={17} />
+            上传题目图片
+            <input type="file" accept="image/*" multiple onChange={(e) => uploadFiles(e.target.files)} />
+          </label>
+        </div>
+      )
+    }
+
+    if (capability === 'data') {
+      return (
+        <div className="capability-row image-tool-row" aria-label="数据分析设置">
+          <span className="image-mode-chip">
+            <ChartColumn size={17} />
+            数据分析
+            <button type="button" title="退出数据分析" onClick={leaveCapabilityMode}><X size={14} /></button>
+          </span>
+          {renderThinkingSelector()}
+          <label className="capability-button image-reference-button" title="上传文件">
+            <LinkIcon size={17} />
+            上传文件
+            <input type="file" accept={attachmentAccept} multiple onChange={(e) => uploadFiles(e.target.files)} />
+          </label>
+        </div>
+      )
+    }
+
+    if (capability === 'super') {
+      return (
+        <div className="capability-row image-tool-row" aria-label="超能模式设置">
+          <span className="image-mode-chip">
+            <Sparkles size={17} />
+            超能模式
+            <small>Beta</small>
+            <button type="button" title="退出超能模式" onClick={leaveCapabilityMode}><X size={14} /></button>
+          </span>
+          <label className="capability-button image-reference-button" title="上传文件">
+            <LinkIcon size={17} />
+            上传文件
+            <input type="file" accept={attachmentAccept} multiple onChange={(e) => uploadFiles(e.target.files)} />
+          </label>
+        </div>
+      )
+    }
+
+    if (capability === 'ppt') {
+      return (
+        <div className="capability-row image-tool-row" aria-label="PPT 生成设置">
+          <span className="image-mode-chip">
+            <Presentation size={17} />
+            PPT 生成
+            <button type="button" title="退出 PPT 生成" onClick={leaveCapabilityMode}><X size={14} /></button>
+          </span>
+          <label className="capability-button image-reference-button" title="上传文件">
+            <LinkIcon size={17} />
+            上传文件
+            <input type="file" accept={attachmentAccept} multiple onChange={(e) => uploadFiles(e.target.files)} />
+          </label>
+          {renderToolbarSelect(
+            'ppt-pages',
+            params.pptPages,
+            pptPageOptions,
+            (value) => updateCapabilityParam('pptPages', value),
+            <List size={17} />,
+            '篇幅',
+          )}
+          {renderToolbarSelect(
+            'ppt-mode',
+            params.pptMode,
+            pptModeOptions,
+            (value) => updateCapabilityParam('pptMode', value),
+            <Presentation size={17} />,
+            '生成类型',
+          )}
+          {params.pptMode === 'PPT视频' && (
+            renderToolbarSelect(
+              'ppt-narration',
+              params.pptNarration,
+              pptNarrationOptions,
+              (value) => updateCapabilityParam('pptNarration', value),
+              <Volume2 size={17} />,
+              '备注音频',
+            )
+          )}
+        </div>
+      )
+    }
 
     return (
       <div className="capability-row image-tool-row" aria-label={`${capabilityLabels[capability]}设置`}>
@@ -1117,49 +1607,32 @@ function App() {
           {capabilityLabels[capability]}
           <button type="button" title="退出当前能力" onClick={leaveCapabilityMode}><X size={14} /></button>
         </span>
-        {capability === 'write' && (
-          <>
-            <span className="image-select-wrap"><FileText size={17} /><select value={params.writingType} onChange={(e) => updateCapabilityParam('writingType', e.target.value)}><option>公众号文章</option><option>小红书笔记</option><option>短文案</option><option>邮件</option><option>方案文档</option></select></span>
-            <span className="image-select-wrap"><List size={17} /><select value={params.writingLength} onChange={(e) => updateCapabilityParam('writingLength', e.target.value)}><option>短</option><option>中等</option><option>长</option><option>详细</option></select></span>
-          </>
-        )}
-        {capability === 'code' && (
-          <>
-            <span className="image-select-wrap"><Braces size={17} /><select value={params.codeLanguage} onChange={(e) => updateCapabilityParam('codeLanguage', e.target.value)}><option>自动识别</option><option>TypeScript</option><option>C#</option><option>Python</option><option>SQL</option></select></span>
-            <span className="image-select-wrap"><Settings size={17} /><select value={params.codeTask} onChange={(e) => updateCapabilityParam('codeTask', e.target.value)}><option>生成/修复</option><option>解释代码</option><option>排查错误</option><option>重构优化</option><option>写测试</option></select></span>
-          </>
-        )}
-        {capability === 'translate' && (
-          <>
-            <span className="image-select-wrap"><Languages size={17} /><select value={params.targetLanguage} onChange={(e) => updateCapabilityParam('targetLanguage', e.target.value)}><option>英文</option><option>中文</option><option>日文</option><option>韩文</option><option>西班牙文</option></select></span>
-            <span className="image-select-wrap"><Quote size={17} /><select value={params.translateMode} onChange={(e) => updateCapabilityParam('translateMode', e.target.value)}><option>自然表达</option><option>忠实原文</option><option>商务正式</option><option>口语化</option><option>双语对照</option></select></span>
-          </>
-        )}
-        {capability === 'research' && (
-          <>
-            <span className="image-select-wrap"><Globe2 size={17} /><select value={params.researchDepth} onChange={(e) => updateCapabilityParam('researchDepth', e.target.value)}><option>快速</option><option>标准</option><option>深入</option></select></span>
-            <button className={agentOptions.enableWebSearch ? 'capability-button active' : 'capability-button'} type="button" onClick={() => setAgentOptions({ ...agentOptions, enableWebSearch: !agentOptions.enableWebSearch })}><Globe2 size={17} />联网搜索</button>
-          </>
-        )}
-        {capability === 'qa' && (
-          <span className="image-select-wrap"><CircleHelp size={17} /><select value={params.qaMode} onChange={(e) => updateCapabilityParam('qaMode', e.target.value)}><option>直接答案</option><option>逐步讲解</option><option>先提示再答案</option><option>错因分析</option></select></span>
-        )}
-        {capability === 'data' && (
-          <span className="image-select-wrap"><ChartColumn size={17} /><select value={params.dataOutput} onChange={(e) => updateCapabilityParam('dataOutput', e.target.value)}><option>洞察+表格</option><option>只要结论</option><option>对比表</option><option>行动建议</option></select></span>
-        )}
-        {capability === 'super' && (
-          <>
-            <button className="capability-button active" type="button"><Sparkles size={17} />深度思考</button>
-            <button className={agentOptions.enableWebSearch ? 'capability-button active' : 'capability-button'} type="button" onClick={() => setAgentOptions({ ...agentOptions, enableWebSearch: !agentOptions.enableWebSearch })}><Globe2 size={17} />联网搜索</button>
-          </>
-        )}
-        {capability === 'ppt' && (
-          <>
-            <span className="image-select-wrap"><Presentation size={17} /><select value={params.pptPages} onChange={(e) => updateCapabilityParam('pptPages', e.target.value)}><option>6页</option><option>8页</option><option>10页</option><option>12页</option></select></span>
-            <span className="image-select-wrap"><Users size={17} /><select value={params.pptAudience} onChange={(e) => updateCapabilityParam('pptAudience', e.target.value)}><option>商务汇报</option><option>产品介绍</option><option>培训课件</option><option>路演提案</option></select></span>
-          </>
-        )}
       </div>
+    )
+  }
+
+  function renderAttachmentPreview(file: Attachment) {
+    const kind = getAttachmentKind(file)
+    const isImage = kind === 'Image'
+    const icon = kind === 'Image' ? <ImagePlus size={22} />
+      : kind === 'PPT' ? <Presentation size={22} />
+      : kind === 'Sheet' ? <TableIcon size={22} />
+      : kind === 'Code' ? <Braces size={22} />
+      : <FileText size={22} />
+
+    return (
+      <article className="attachment-card" key={file.url}>
+        <div className={isImage ? 'attachment-thumb image' : 'attachment-thumb'}>
+          {isImage ? <img src={file.url} alt={file.fileName} /> : icon}
+        </div>
+        <div className="attachment-info">
+          <strong title={file.fileName}>{file.fileName}</strong>
+          <span>{kind} · {formatFileSize(file.size)}</span>
+        </div>
+        <button type="button" title="移除附件" onClick={() => setAttachments((current) => current.filter((item) => item.url !== file.url))}>
+          <X size={14} />
+        </button>
+      </article>
     )
   }
 
@@ -1200,7 +1673,7 @@ function App() {
     await submitMessage(message.content)
   }
 
-  async function downloadMessageExport(message: Message, format: 'docx' | 'pptx') {
+  async function downloadMessageExport(message: Message, format: 'docx' | 'pptx' | 'mp4') {
     const cid = conversationIdRef.current
     if (!cid || isMessageGenerating(message)) return
 
@@ -1221,7 +1694,7 @@ function App() {
       link.click()
       link.remove()
       window.URL.revokeObjectURL(url)
-      showToast(format === 'pptx' ? 'PPTX 已生成' : 'DOCX 已生成')
+      showToast(format === 'mp4' ? '视频已生成' : format === 'pptx' ? 'PPTX 已生成' : 'DOCX 已生成')
     } catch (error) {
       showToast(error instanceof Error ? error.message : '导出失败')
     }
@@ -1338,7 +1811,7 @@ function App() {
       flushTimer = window.setTimeout(() => {
         flushTimer = 0
         flushPendingSnapshot()
-      }, 160)
+      }, 500)
     }
 
     try {
@@ -1865,10 +2338,27 @@ function App() {
       return
     }
     const copied = await copyText(text)
+    if (copied) {
+      setCopiedMessageId(message.id)
+      window.setTimeout(() => setCopiedMessageId((current) => current === message.id ? null : current), 1800)
+    }
     showToast(copied ? '消息已复制' : '当前浏览器不支持直接复制')
   }
 
   const speakMessageContent = (message: Message) => {
+    if (speakingMessageId === message.id && 'speechSynthesis' in window) {
+      if (isSpeechPaused) {
+        window.speechSynthesis.resume()
+        setIsSpeechPaused(false)
+        showToast('继续朗读')
+      } else {
+        window.speechSynthesis.pause()
+        setIsSpeechPaused(true)
+        showToast('已暂停朗读')
+      }
+      return
+    }
+
     const text = getMessagePlainText(message)
     if (!text) {
       showToast('这条消息暂无可朗读内容')
@@ -1881,13 +2371,18 @@ function App() {
     window.speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text.slice(0, 2000))
     utterance.lang = 'zh-CN'
+    utterance.onend = () => {
+      setSpeakingMessageId((current) => current === message.id ? null : current)
+      setIsSpeechPaused(false)
+    }
+    utterance.onerror = () => {
+      setSpeakingMessageId((current) => current === message.id ? null : current)
+      setIsSpeechPaused(false)
+    }
+    setSpeakingMessageId(message.id)
+    setIsSpeechPaused(false)
     window.speechSynthesis.speak(utterance)
     showToast('开始朗读')
-  }
-
-  const markMessageFeedback = (message: Message, value: 'up' | 'down') => {
-    setMessageFeedback((current) => ({ ...current, [message.id]: value }))
-    showToast(value === 'up' ? '已记录：有帮助' : '已记录：需要改进')
   }
 
   const askFollowupFromMessage = (message: Message) => {
@@ -1895,19 +2390,42 @@ function App() {
     setDraft(`请基于上面这条回答继续展开：\n\n${getMessagePlainText(message).slice(0, 800)}\n\n我的追问是：`)
   }
 
-  const reportMessage = (message: Message) => {
+  const toggleReferencePanel = (message: Message) => {
+    setOpenReferenceMessageIds((current) => {
+      const next = new Set(current)
+      if (next.has(message.id)) {
+        next.delete(message.id)
+      } else {
+        next.add(message.id)
+      }
+      return next
+    })
+  }
+
+  const reportMessage = () => {
     setOpenMessageMenuId(null)
-    setMessageFeedback((current) => ({ ...current, [message.id]: 'down' }))
     showToast('已标记反馈，后续会接入后台反馈记录')
   }
   const [copyFeedback, setCopyFeedback] = useState('')
   const [copyTitleFeedback, setCopyTitleFeedback] = useState('')
   const [openMessageMenuId, setOpenMessageMenuId] = useState<number | null>(null)
-  const [messageFeedback, setMessageFeedback] = useState<Record<number, 'up' | 'down'>>({})
+  const [copiedMessageId, setCopiedMessageId] = useState<number | null>(null)
+  const [speakingMessageId, setSpeakingMessageId] = useState<number | null>(null)
+  const [isSpeechPaused, setIsSpeechPaused] = useState(false)
+  const [openReferenceMessageIds, setOpenReferenceMessageIds] = useState<Set<number>>(new Set())
   const [showShareModal, setShowShareModal] = useState(false)
   const [shareExpiry, setShareExpiry] = useState('24h')
   const [shareUrl, setShareUrl] = useState('')
   const [shareLoading, setShareLoading] = useState(false)
+
+  useEffect(() => {
+    return () => {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
+
   const copyPreview = async () => {
     if (!previewMessage) return
     const html = richEditorRef.current?.getHTML() ?? ''
@@ -2399,13 +2917,29 @@ function App() {
       )
     },
   }
-  const renderReferencePanel = (referenceContent: string) => {
+  const getReferenceSourceCount = (referenceContent: string) => {
+    const content = referenceContent.trim()
+    if (!content) return 0
+    const sources = parseReferenceSources(content)
+    return sources.length || content.split('\n').filter((line) => line.trim()).length
+  }
+
+  const renderReferencePanel = (message: Message, referenceContent: string) => {
     const content = referenceContent.trim()
     if (!content) return null
     const sources = parseReferenceSources(content)
+    const isOpen = openReferenceMessageIds.has(message.id)
 
     return (
-      <details className="article-reference-panel">
+      <details className="article-reference-panel" open={isOpen} onToggle={(event) => {
+        const open = event.currentTarget.open
+        setOpenReferenceMessageIds((current) => {
+          const next = new Set(current)
+          if (open) next.add(message.id)
+          else next.delete(message.id)
+          return next
+        })
+      }}>
         <summary>
           <span>参考资料</span>
           {sources.length > 0 && <small>{sources.length} 条</small>}
@@ -2464,7 +2998,7 @@ function App() {
             <span className="empty-message">生成结果正在同步，请稍候。</span>
           )}
         </div>
-        {message.role === 'assistant' && !isGeneratingImageMessage(message) && !isMessageGenerating(message) && renderReferencePanel(referenceContent)}
+        {message.role === 'assistant' && !isGeneratingImageMessage(message) && !isMessageGenerating(message) && renderReferencePanel(message, referenceContent)}
       </>
     )
   }
@@ -2472,29 +3006,40 @@ function App() {
   const renderMessageActions = (message: Message) => {
     if (isMessageGenerating(message)) return null
     const isAssistant = message.role === 'assistant'
-    const feedback = messageFeedback[message.id]
+    const referenceCount = isAssistant ? getReferenceSourceCount(extractReferenceSection(message.content)) : 0
+    const isReferenceOpen = openReferenceMessageIds.has(message.id)
+    const isSpeaking = speakingMessageId === message.id
 
     return (
       <div className="message-action-row" aria-label="消息操作">
-        <button type="button" title="复制" onClick={() => void copyMessageContent(message)}>
-          <Copy size={16} />
+        <button className={copiedMessageId === message.id ? 'active' : ''} type="button" title="复制" onClick={() => void copyMessageContent(message)}>
+          {copiedMessageId === message.id ? <Check size={16} /> : <Copy size={16} />}
         </button>
         {isAssistant && (
           <>
-            <button type="button" title="朗读" onClick={() => speakMessageContent(message)}>
-              <Volume2 size={16} />
-            </button>
-            <button className={feedback === 'up' ? 'active' : ''} type="button" title="有帮助" onClick={() => markMessageFeedback(message, 'up')}>
-              <ThumbsUp size={16} />
-            </button>
-            <button className={feedback === 'down' ? 'active' : ''} type="button" title="需要改进" onClick={() => markMessageFeedback(message, 'down')}>
-              <ThumbsDown size={16} />
+            <button className={isSpeaking ? 'active speech-action' : 'speech-action'} type="button" title={isSpeaking && !isSpeechPaused ? '暂停朗读' : '朗读'} onClick={() => speakMessageContent(message)}>
+              {isSpeaking ? (
+                <span className={isSpeechPaused ? 'speech-bars paused' : 'speech-bars'} aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              ) : (
+                <Volume2 size={16} />
+              )}
             </button>
           </>
         )}
-        <button type="button" title={isAssistant ? '追问' : '重新生成'} onClick={() => isAssistant ? askFollowupFromMessage(message) : void retryFromMessage(message)} disabled={!isAssistant && isStreaming}>
-          {isAssistant ? <CornerUpRight size={16} /> : <RotateCcw size={16} />}
-        </button>
+        {!isAssistant && (
+          <button type="button" title="重新生成" onClick={() => void retryFromMessage(message)} disabled={isStreaming}>
+            <RotateCcw size={16} />
+          </button>
+        )}
+        {isAssistant && referenceCount > 0 && (
+          <button className={isReferenceOpen ? 'reference-toggle active' : 'reference-toggle'} type="button" onClick={() => toggleReferencePanel(message)} title={isReferenceOpen ? '收起参考资料' : '展开参考资料'}>
+            参考 {referenceCount} 篇资料
+          </button>
+        )}
         {isAssistant && (
           <div className="message-more-wrap">
             <button className={openMessageMenuId === message.id ? 'active' : ''} type="button" title="更多" onClick={() => setOpenMessageMenuId((current) => current === message.id ? null : message.id)}>
@@ -2518,7 +3063,15 @@ function App() {
                   <Presentation size={16} />
                   导出 PPT
                 </button>
-                <button type="button" onClick={() => reportMessage(message)}>
+                <button type="button" onClick={() => { setOpenMessageMenuId(null); void downloadMessageExport(message, 'mp4') }}>
+                  <Video size={16} />
+                  导出视频
+                </button>
+                <button type="button" onClick={() => askFollowupFromMessage(message)}>
+                  <MessageSquarePlus size={16} />
+                  基于此追问
+                </button>
+                <button type="button" onClick={reportMessage}>
                   <Flag size={16} />
                   反馈与举报
                 </button>
@@ -2583,7 +3136,6 @@ function App() {
             <strong>内容运营助手</strong>
           </div>
           <div className="sidebar-actions">
-            <button title="设置" onClick={openSettings}><Settings size={18} /></button>
             <button title="退出登录" onClick={logout}><LogOut size={18} /></button>
           </div>
         </div>
@@ -2604,11 +3156,6 @@ function App() {
           <ImagePlus size={18} />
           图片资产
         </button>
-        <button className="new-chat" type="button" onClick={openSettings}>
-          <Settings size={18} />
-          模型与账号
-        </button>
-
         <div className="sidebar-section-title">历史对话</div>
         <div className="conversation-list">
           {conversations.map((item) => (
@@ -2624,12 +3171,23 @@ function App() {
         </div>
         <button className="sidebar-user" type="button" onClick={openSettings}>
           <span className="brand-avatar small">{(user.displayName || user.email || '你').slice(0, 1)}</span>
-          <span>{user.displayName || user.email || 'SunnyFan'}</span>
+          <span className="sidebar-user-copy">
+            <strong>{user.displayName || user.email || 'SunnyFan'}</strong>
+            <small>个人设置</small>
+          </span>
+          <Settings size={17} />
         </button>
       </aside>
       <button className="mobile-nav-backdrop" type="button" aria-label="关闭会话列表" onClick={() => setIsMobileNavOpen(false)} />
 
-      <section className={activePage === 'editor' ? 'chat-pane editor-active' : 'chat-pane'}>
+      <section
+        ref={chatPaneRef}
+        className={activePage === 'editor' ? 'chat-pane editor-active' : 'chat-pane'}
+        style={activePage === 'chat' ? ({
+          '--composer-height': `${composerMetrics.height}px`,
+          '--composer-center-x': composerMetrics.centerX > 0 ? `${composerMetrics.centerX}px` : '50%',
+        } as CSSProperties) : undefined}
+      >
         {activePage === 'editor' && previewMessage ? (
           <div className="editor-page">
             <header className="editor-page-header">
@@ -2944,10 +3502,6 @@ function App() {
           <button className={activePage === 'images' ? 'top-settings mobile-only-nav-action active' : 'top-settings mobile-only-nav-action'} type="button" onClick={activePage === 'images' ? goToChat : openImageLibrary}>
             {activePage === 'images' ? <ArrowLeft size={18} /> : <ImagePlus size={18} />}
             {activePage === 'images' ? '返回前台' : '图片'}
-          </button>
-          <button className="top-settings" type="button" onClick={openSettings}>
-            <PanelRightOpen size={18} />
-            设置
           </button>
           {user.isAdmin && (
             <button className={activePage === 'admin' ? 'top-settings active top-return' : 'top-settings'} type="button" onClick={() => activePage === 'admin' ? goToChat() : openAdminPage()}>
@@ -3502,7 +4056,14 @@ function App() {
           </div>
         ) : (
           <>
-        <div className="messages" ref={messagesRef}>
+        <div
+          className="messages"
+          ref={messagesRef}
+          onScroll={updateChatBottomState}
+          onLoadCapture={() => {
+            if (isChatAtBottomRef.current) anchorChatToBottom()
+          }}
+        >
           {messages.length === 0 && (
             <div className="empty-state">
               <span className="empty-brand-mark"><span /></span>
@@ -3563,13 +4124,11 @@ function App() {
                           <div className="document-card-actions">
                             <button type="button" onClick={() => saveArticleAsset(message)}><Save size={14} />资产</button>
                             <button type="button" onClick={() => openEditor(message)}><PanelRightOpen size={14} />编辑</button>
-                            <button type="button" onClick={() => downloadMessageExport(message, 'docx')}><FileText size={14} />DOCX</button>
-                            <button type="button" onClick={() => downloadMessageExport(message, 'pptx')}><Presentation size={14} />PPT</button>
                           </div>
                         )}
                       </div>
                     </div>
-                    {!isMessageGenerating(message) && renderReferencePanel(extractReferenceSection(message.content))}
+                    {!isMessageGenerating(message) && renderReferencePanel(message, extractReferenceSection(message.content))}
                   </>
                 ) : (
                   renderTextMessage(message)
@@ -3580,8 +4139,13 @@ function App() {
           ))}
           <div ref={bottomRef} />
         </div>
+        {showScrollToBottom && activePage === 'chat' && (
+          <button className="scroll-bottom-button" type="button" onClick={scrollChatToBottom} title="回到底部" aria-label="回到底部">
+            <ArrowDown size={22} />
+          </button>
+        )}
 
-        <form className="composer" onSubmit={sendMessage}>
+        <form className="composer" ref={composerRef} onSubmit={sendMessage}>
           <div
             className={isComposerDragging ? 'composer-card dragging' : 'composer-card'}
             onDragOver={(event) => {
@@ -3597,18 +4161,11 @@ function App() {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleComposerKeyDown}
               onPaste={(event) => void handleComposerPaste(event)}
-              placeholder={agentOptions.capability === 'image' ? '描述你想要的图片' : '发消息，粘贴图片，或拖入文件...'}
+              placeholder={agentOptions.capability === 'image' ? '描述你想要的图片' : agentOptions.capability === 'write' ? '输入主题和写作要求' : agentOptions.capability === 'code' ? '输入“@”唤起常用语，或粘贴代码快速提问' : agentOptions.capability === 'translate' ? '输入要翻译的文本' : agentOptions.capability === 'research' ? '输入主题和报告要求' : agentOptions.capability === 'qa' ? '输入题目，或粘贴拖拽题目图片' : agentOptions.capability === 'data' ? '请输入对于上传数据的任何分析处理要求' : agentOptions.capability === 'super' ? '输入问题或任务' : agentOptions.capability === 'ppt' && agentOptions.capabilityParams.pptMode === 'PPT视频' ? '输入视频主题、受众、时长和演讲风格' : agentOptions.capability === 'ppt' ? '输入主题，添加具体要求和参考资料以获得更好效果' : '发消息，粘贴图片，或拖入文件...'}
             />
             {attachments.length > 0 && (
               <div className="attachment-row">
-                {attachments.map((file) => (
-                  <span className="attachment-chip" key={file.url}>
-                    {file.fileName}
-                    <button type="button" title="移除附件" onClick={() => setAttachments((current) => current.filter((item) => item.url !== file.url))}>
-                      <X size={14} />
-                    </button>
-                  </span>
-                ))}
+                {attachments.map((file) => renderAttachmentPreview(file))}
               </div>
             )}
             <div className="composer-bottom-row">
@@ -3616,9 +4173,10 @@ function App() {
                 <div className="capability-row" aria-label="常用能力">
                   <label className="capability-add" title="上传图片或文件">
                     <Plus size={19} />
-                    <input type="file" multiple onChange={(e) => uploadFiles(e.target.files)} />
+                    <input type="file" accept={attachmentAccept} multiple onChange={(e) => uploadFiles(e.target.files)} />
                   </label>
                   <span className="capability-divider" />
+                  {renderThinkingSelector()}
                   {primaryCapabilities.map((item) => (
                     <button className="capability-button" type="button" key={item.key} onClick={() => applyCapability(item.key)}>
                       {item.icon}

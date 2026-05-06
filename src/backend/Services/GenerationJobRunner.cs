@@ -18,7 +18,10 @@ public sealed class GenerationJobRunner(
     IAppSettingsService appSettingsService) : IGenerationJobRunner
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly TimeSpan MinStreamPersistInterval = TimeSpan.FromMilliseconds(1200);
+    private static readonly TimeSpan MinCancelCheckInterval = TimeSpan.FromMilliseconds(1500);
     private DateTime lastPersistAt = DateTime.MinValue;
+    private DateTime lastCancelCheckAt = DateTime.MinValue;
 
     public async Task<GenerationJobDto> CreateAsync(long userId, SendMessageRequest request, CancellationToken cancellationToken)
     {
@@ -326,7 +329,7 @@ public sealed class GenerationJobRunner(
                     var partialArticle = ArticleMarkdownImageComposer.TrimMarkdownTitle(
                         ArticleMarkdownImageComposer.PlaceImagesInArticlePreview(articleWithoutImages, images),
                         30);
-                    await ReplaceContentAsync(job, partialArticle, force: true, cancellationToken);
+                    await ReplaceContentAsync(job, partialArticle, force: false, cancellationToken);
                     await AddThinkingAsync(job, originalRequest, string.IsNullOrWhiteSpace(image.Url)
                         ? $"{image.Title} 生成失败：{image.Error}"
                         : image.IsPartial ? $"{image.Title} 正在生成，已收到预览图。" : $"{image.Title} 已生成并放入文章。", cancellationToken);
@@ -490,7 +493,7 @@ public sealed class GenerationJobRunner(
     private async Task ReplaceContentAsync(GenerationJob job, string content, bool force, CancellationToken cancellationToken)
     {
         job.Content = content;
-        if (job.AssistantMessage is not null)
+        if (force && job.AssistantMessage is not null)
         {
             job.AssistantMessage.Content = string.IsNullOrWhiteSpace(content)
                 ? "生成没有返回有效内容，请点击上一条消息重试。"
@@ -533,12 +536,12 @@ public sealed class GenerationJobRunner(
     private async Task PersistAsync(GenerationJob job, bool force, CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        if (!force && now - lastPersistAt < TimeSpan.FromMilliseconds(450))
+        if (!force && now - lastPersistAt < MinStreamPersistInterval)
         {
             return;
         }
 
-        await ThrowIfCanceledAsync(job.Id, cancellationToken);
+        await ThrowIfCanceledAsync(job.Id, force, cancellationToken);
         job.Version++;
         job.UpdatedAt = now;
         lastPersistAt = now;
@@ -547,6 +550,18 @@ public sealed class GenerationJobRunner(
 
     private async Task ThrowIfCanceledAsync(long jobId, CancellationToken cancellationToken)
     {
+        await ThrowIfCanceledAsync(jobId, force: true, cancellationToken);
+    }
+
+    private async Task ThrowIfCanceledAsync(long jobId, bool force, CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        if (!force && now - lastCancelCheckAt < MinCancelCheckInterval)
+        {
+            return;
+        }
+
+        lastCancelCheckAt = now;
         var status = await db.GenerationJobs
             .AsNoTracking()
             .Where(x => x.Id == jobId)
@@ -667,7 +682,12 @@ public sealed class GenerationJobRunner(
     {
         var attachmentCount = request.Attachments?.Count ?? 0;
         var options = request.Options;
-        var thinking = options?.ThinkingMode == "deep" ? "深度思考已开启" : "普通模式";
+        var thinking = options?.ThinkingMode?.Trim().ToLowerInvariant() switch
+        {
+            "expert" => "专家思考已开启",
+            "think" or "deep" => "思考模式已开启",
+            _ => "快速模式"
+        };
         var search = options?.EnableWebSearch == true ? "智能搜索已开启" : "未开启智能搜索";
         return $"任务状态：{thinking}，{search}，附件 {attachmentCount} 个。";
     }
