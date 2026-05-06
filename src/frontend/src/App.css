@@ -6159,7 +6159,7 @@ button {
 
 .topbar {
   position: relative;
-  justify-content: center !important;
+  justify-content: flex-end !important;
   border-bottom: 1px solid #f0f0f0 !important;
   background: rgba(255, 255, 255, 0.96) !important;
   backdrop-filter: blur(12px);
@@ -6168,11 +6168,13 @@ button {
 .topbar > div {
   position: absolute;
   left: 50%;
+  top: 50%;
   min-width: 0 !important;
   max-width: 280px;
   flex: 0 0 auto !important;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   text-align: center;
+  pointer-events: none;
 }
 
 .topbar h1 {
@@ -6191,6 +6193,7 @@ button {
 .top-settings,
 .live {
   min-height: 34px !important;
+  flex: 0 0 auto !important;
   border: 0 !important;
   color: #27272a !important;
   background: transparent !important;
@@ -6204,6 +6207,11 @@ button {
 
 .live {
   display: none !important;
+}
+
+.mobile-menu-button {
+  position: absolute !important;
+  left: 14px !important;
 }
 
 .messages {
