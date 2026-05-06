@@ -279,6 +279,22 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
             }
         }
 
+        if (!string.IsNullOrWhiteSpace(request.Options?.Capability))
+        {
+            builder.AppendLine();
+            builder.AppendLine();
+            builder.AppendLine($"能力模式：{request.Options.Capability}");
+            if (request.Options.CapabilityParams is { Count: > 0 })
+            {
+                builder.AppendLine("能力参数：");
+                foreach (var item in request.Options.CapabilityParams)
+                {
+                    builder.AppendLine($"- {item.Key}: {item.Value}");
+                }
+            }
+            builder.AppendLine("请严格按照当前能力模式和能力参数处理用户需求。");
+        }
+
         return builder.ToString();
     }
 

@@ -140,6 +140,32 @@ const imageTemplates = [
   { value: 'scene', label: '场景图', prompt: '生成一张真实场景图，人物、环境和光线自然，有生活细节。' },
 ] as const
 
+const capabilityLabels: Record<CapabilityKey, string> = {
+  quick: '快速',
+  write: '帮我写作',
+  image: '图像生成',
+  code: '编程',
+  translate: '翻译',
+  research: '深入研究',
+  qa: '解题答疑',
+  data: '数据分析',
+  super: '超能模式',
+  ppt: 'PPT 生成',
+}
+
+const capabilityIcons: Record<CapabilityKey, ReactNode> = {
+  quick: <Zap size={17} />,
+  write: <FileText size={17} />,
+  image: <ImagePlus size={17} />,
+  code: <Braces size={17} />,
+  translate: <Languages size={17} />,
+  research: <Globe2 size={17} />,
+  qa: <CircleHelp size={17} />,
+  data: <ChartColumn size={17} />,
+  super: <Sparkles size={17} />,
+  ppt: <Presentation size={17} />,
+}
+
 type ConfirmOptions = {
   title: string
   message: string
@@ -355,6 +381,20 @@ function App() {
     imageRatio: '1:1',
     imageStyle: '默认',
     imageTemplate: 'none',
+    capability: 'quick' as CapabilityKey,
+    capabilityParams: {
+      writingType: '公众号文章',
+      writingLength: '中等',
+      codeLanguage: '自动识别',
+      codeTask: '生成/修复',
+      targetLanguage: '英文',
+      translateMode: '自然表达',
+      researchDepth: '标准',
+      qaMode: '逐步讲解',
+      dataOutput: '洞察+表格',
+      pptPages: '8页',
+      pptAudience: '商务汇报',
+    } as Record<string, string>,
   })
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -968,45 +1008,53 @@ function App() {
 
   function applyCapability(key: CapabilityKey) {
     const source = draft.trim()
-    if (key === 'image') {
-      setIsToolMenuOpen(false)
-      setAgentOptions((current) => ({ ...current, intentMode: 'image' }))
-      setDraft(source)
-      return
-    }
-
-    const instruction: Record<CapabilityKey, string> = {
-      quick: '请快速理解我的需求，并直接给出可执行结果：\n\n',
-      write: '请帮我写作下面内容，要求结构清楚、表达自然、可直接使用：\n\n',
-      image: '',
-      code: '请作为编程助手处理下面问题，优先给出可运行方案和关键代码：\n\n',
-      translate: '请把下面内容翻译成目标语言，并保留原意、语气和格式：\n\n',
-      research: '请进行深入研究，先拆解问题，再结合可验证信息给出结论、依据和建议：\n\n',
-      qa: '请逐步解答下面问题，说明关键思路，并给出最终答案：\n\n',
-      data: '请分析下面数据或材料，输出洞察、趋势、异常点和行动建议：\n\n',
-      super: '请用深度思考模式处理下面复杂任务，先规划，再给出完整结果：\n\n',
-      ppt: '请把下面内容整理成一份可直接导出为 PPTX 的中文演示稿。要求：先给封面标题，再按页输出，每页包含页标题和 3-5 个要点，控制文字密度，适合商务汇报。\n\n',
-    }
 
     setIsToolMenuOpen(false)
     setAgentOptions((current) => {
-      const next = { ...current }
+      const next = { ...current, capability: key }
+      if (key === 'quick') {
+        next.intentMode = 'auto'
+        next.outputFormat = 'article'
+        next.thinkingMode = 'normal'
+        next.enableWebSearch = false
+      }
       if (key === 'write') next.intentMode = 'article'
+      if (key === 'image') next.intentMode = 'image'
+      if (key === 'code') next.intentMode = 'code' as IntentMode
+      if (key === 'translate') next.intentMode = 'translate' as IntentMode
+      if (key === 'research') next.intentMode = 'research' as IntentMode
+      if (key === 'qa') next.intentMode = 'chat'
+      if (key === 'data') next.intentMode = 'table' as IntentMode
       if (key === 'ppt') {
         next.intentMode = 'document'
         next.outputFormat = 'pptx'
       }
       if (key === 'research' || key === 'super') {
+        if (key === 'super') next.intentMode = 'document'
         next.thinkingMode = 'deep'
         next.enableWebSearch = true
       }
       return next
     })
-    setDraft(source ? `${instruction[key]}${source}` : instruction[key])
+    setDraft(source)
   }
 
   function leaveImageMode() {
-    setAgentOptions((current) => ({ ...current, intentMode: 'auto' }))
+    setAgentOptions((current) => ({ ...current, intentMode: 'auto', capability: 'quick' }))
+  }
+
+  function leaveCapabilityMode() {
+    setAgentOptions((current) => ({ ...current, intentMode: 'auto', capability: 'quick', outputFormat: 'article', thinkingMode: 'normal', enableWebSearch: false }))
+  }
+
+  function updateCapabilityParam(key: string, value: string) {
+    setAgentOptions((current) => ({
+      ...current,
+      capabilityParams: {
+        ...current.capabilityParams,
+        [key]: value,
+      },
+    }))
   }
 
   function applyImageTemplate(value: string) {
@@ -1014,6 +1062,105 @@ function App() {
     setAgentOptions((current) => ({ ...current, imageTemplate: value }))
     if (!template?.prompt) return
     setDraft((current) => current.trim() ? `${template.prompt}\n\n${current}` : template.prompt)
+  }
+
+  function renderCapabilityTools() {
+    const capability = agentOptions.capability
+    const params = agentOptions.capabilityParams
+    if (capability === 'image') {
+      return (
+        <div className="capability-row image-tool-row" aria-label="图像生成设置">
+          <span className="image-mode-chip">
+            <ImagePlus size={17} />
+            图像生成
+            <button type="button" title="退出图像生成" onClick={leaveImageMode}><X size={14} /></button>
+          </span>
+          <label className="capability-button image-reference-button" title="上传参考图">
+            <LinkIcon size={17} />
+            参考图
+            <input type="file" accept="image/*" multiple onChange={(e) => uploadFiles(e.target.files)} />
+          </label>
+          <span className="image-select-wrap">
+            <Sparkles size={17} />
+            <select value={provider.imageModelName || '图像模型'} onChange={() => undefined} title="当前图像模型">
+              <option>{provider.imageModelName || '图像模型'}</option>
+            </select>
+          </span>
+          <span className="image-select-wrap">
+            <PanelRightOpen size={17} />
+            <select value={agentOptions.imageRatio} onChange={(e) => setAgentOptions({ ...agentOptions, imageRatio: e.target.value })} title="图片比例">
+              {imageRatios.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
+            </select>
+          </span>
+          <span className="image-select-wrap">
+            <CircleHelp size={17} />
+            <select value={agentOptions.imageStyle} onChange={(e) => setAgentOptions({ ...agentOptions, imageStyle: e.target.value })} title="图片风格">
+              {imageStyles.map((style) => <option key={style} value={style}>{style}</option>)}
+            </select>
+          </span>
+          <span className="image-select-wrap">
+            <ExternalLink size={17} />
+            <select value={agentOptions.imageTemplate} onChange={(e) => applyImageTemplate(e.target.value)} title="图片模板">
+              {imageTemplates.map((template) => <option key={template.value} value={template.value}>{template.label}</option>)}
+            </select>
+          </span>
+        </div>
+      )
+    }
+
+    if (capability === 'quick') return null
+
+    return (
+      <div className="capability-row image-tool-row" aria-label={`${capabilityLabels[capability]}设置`}>
+        <span className="image-mode-chip">
+          {capabilityIcons[capability]}
+          {capabilityLabels[capability]}
+          <button type="button" title="退出当前能力" onClick={leaveCapabilityMode}><X size={14} /></button>
+        </span>
+        {capability === 'write' && (
+          <>
+            <span className="image-select-wrap"><FileText size={17} /><select value={params.writingType} onChange={(e) => updateCapabilityParam('writingType', e.target.value)}><option>公众号文章</option><option>小红书笔记</option><option>短文案</option><option>邮件</option><option>方案文档</option></select></span>
+            <span className="image-select-wrap"><List size={17} /><select value={params.writingLength} onChange={(e) => updateCapabilityParam('writingLength', e.target.value)}><option>短</option><option>中等</option><option>长</option><option>详细</option></select></span>
+          </>
+        )}
+        {capability === 'code' && (
+          <>
+            <span className="image-select-wrap"><Braces size={17} /><select value={params.codeLanguage} onChange={(e) => updateCapabilityParam('codeLanguage', e.target.value)}><option>自动识别</option><option>TypeScript</option><option>C#</option><option>Python</option><option>SQL</option></select></span>
+            <span className="image-select-wrap"><Settings size={17} /><select value={params.codeTask} onChange={(e) => updateCapabilityParam('codeTask', e.target.value)}><option>生成/修复</option><option>解释代码</option><option>排查错误</option><option>重构优化</option><option>写测试</option></select></span>
+          </>
+        )}
+        {capability === 'translate' && (
+          <>
+            <span className="image-select-wrap"><Languages size={17} /><select value={params.targetLanguage} onChange={(e) => updateCapabilityParam('targetLanguage', e.target.value)}><option>英文</option><option>中文</option><option>日文</option><option>韩文</option><option>西班牙文</option></select></span>
+            <span className="image-select-wrap"><Quote size={17} /><select value={params.translateMode} onChange={(e) => updateCapabilityParam('translateMode', e.target.value)}><option>自然表达</option><option>忠实原文</option><option>商务正式</option><option>口语化</option><option>双语对照</option></select></span>
+          </>
+        )}
+        {capability === 'research' && (
+          <>
+            <span className="image-select-wrap"><Globe2 size={17} /><select value={params.researchDepth} onChange={(e) => updateCapabilityParam('researchDepth', e.target.value)}><option>快速</option><option>标准</option><option>深入</option></select></span>
+            <button className={agentOptions.enableWebSearch ? 'capability-button active' : 'capability-button'} type="button" onClick={() => setAgentOptions({ ...agentOptions, enableWebSearch: !agentOptions.enableWebSearch })}><Globe2 size={17} />联网搜索</button>
+          </>
+        )}
+        {capability === 'qa' && (
+          <span className="image-select-wrap"><CircleHelp size={17} /><select value={params.qaMode} onChange={(e) => updateCapabilityParam('qaMode', e.target.value)}><option>直接答案</option><option>逐步讲解</option><option>先提示再答案</option><option>错因分析</option></select></span>
+        )}
+        {capability === 'data' && (
+          <span className="image-select-wrap"><ChartColumn size={17} /><select value={params.dataOutput} onChange={(e) => updateCapabilityParam('dataOutput', e.target.value)}><option>洞察+表格</option><option>只要结论</option><option>对比表</option><option>行动建议</option></select></span>
+        )}
+        {capability === 'super' && (
+          <>
+            <button className="capability-button active" type="button"><Sparkles size={17} />深度思考</button>
+            <button className={agentOptions.enableWebSearch ? 'capability-button active' : 'capability-button'} type="button" onClick={() => setAgentOptions({ ...agentOptions, enableWebSearch: !agentOptions.enableWebSearch })}><Globe2 size={17} />联网搜索</button>
+          </>
+        )}
+        {capability === 'ppt' && (
+          <>
+            <span className="image-select-wrap"><Presentation size={17} /><select value={params.pptPages} onChange={(e) => updateCapabilityParam('pptPages', e.target.value)}><option>6页</option><option>8页</option><option>10页</option><option>12页</option></select></span>
+            <span className="image-select-wrap"><Users size={17} /><select value={params.pptAudience} onChange={(e) => updateCapabilityParam('pptAudience', e.target.value)}><option>商务汇报</option><option>产品介绍</option><option>培训课件</option><option>路演提案</option></select></span>
+          </>
+        )}
+      </div>
+    )
   }
 
   async function submitMessage(content: string) {
@@ -3450,7 +3597,7 @@ function App() {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleComposerKeyDown}
               onPaste={(event) => void handleComposerPaste(event)}
-              placeholder={agentOptions.intentMode === 'image' ? '描述你想要的图片' : '发消息，粘贴图片，或拖入文件...'}
+              placeholder={agentOptions.capability === 'image' ? '描述你想要的图片' : '发消息，粘贴图片，或拖入文件...'}
             />
             {attachments.length > 0 && (
               <div className="attachment-row">
@@ -3465,44 +3612,7 @@ function App() {
               </div>
             )}
             <div className="composer-bottom-row">
-              {agentOptions.intentMode === 'image' ? (
-                <div className="capability-row image-tool-row" aria-label="图像生成设置">
-                  <span className="image-mode-chip">
-                    <ImagePlus size={17} />
-                    图像生成
-                    <button type="button" title="退出图像生成" onClick={leaveImageMode}><X size={14} /></button>
-                  </span>
-                  <label className="capability-button image-reference-button" title="上传参考图">
-                    <LinkIcon size={17} />
-                    参考图
-                    <input type="file" accept="image/*" multiple onChange={(e) => uploadFiles(e.target.files)} />
-                  </label>
-                  <span className="image-select-wrap">
-                    <Sparkles size={17} />
-                    <select value={provider.imageModelName || '图像模型'} onChange={() => undefined} title="当前图像模型">
-                      <option>{provider.imageModelName || '图像模型'}</option>
-                    </select>
-                  </span>
-                  <span className="image-select-wrap">
-                    <PanelRightOpen size={17} />
-                    <select value={agentOptions.imageRatio} onChange={(e) => setAgentOptions({ ...agentOptions, imageRatio: e.target.value })} title="图片比例">
-                      {imageRatios.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
-                    </select>
-                  </span>
-                  <span className="image-select-wrap">
-                    <CircleHelp size={17} />
-                    <select value={agentOptions.imageStyle} onChange={(e) => setAgentOptions({ ...agentOptions, imageStyle: e.target.value })} title="图片风格">
-                      {imageStyles.map((style) => <option key={style} value={style}>{style}</option>)}
-                    </select>
-                  </span>
-                  <span className="image-select-wrap">
-                    <ExternalLink size={17} />
-                    <select value={agentOptions.imageTemplate} onChange={(e) => applyImageTemplate(e.target.value)} title="图片模板">
-                      {imageTemplates.map((template) => <option key={template.value} value={template.value}>{template.label}</option>)}
-                    </select>
-                  </span>
-                </div>
-              ) : (
+              {renderCapabilityTools() ?? (
                 <div className="capability-row" aria-label="常用能力">
                   <label className="capability-add" title="上传图片或文件">
                     <Plus size={19} />

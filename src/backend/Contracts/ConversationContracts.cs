@@ -33,7 +33,7 @@ public sealed record GenerationJobSummaryDto(
     DateTime? StartedAt,
     DateTime? CompletedAt);
 public sealed record AttachmentDto(string FileName, string ContentType, long Size, string Url);
-public sealed record AgentOptionsDto(string ThinkingMode, string Platform, string OutputFormat, decimal Temperature, int ImageCount, bool EnableWebSearch, bool ShowThinking, string? IntentMode = null, string? StylePreset = null, string? ImageRatio = null, string? ImageStyle = null, string? ImageTemplate = null);
+public sealed record AgentOptionsDto(string ThinkingMode, string Platform, string OutputFormat, decimal Temperature, int ImageCount, bool EnableWebSearch, bool ShowThinking, string? IntentMode = null, string? StylePreset = null, string? ImageRatio = null, string? ImageStyle = null, string? ImageTemplate = null, string? Capability = null, IReadOnlyDictionary<string, string>? CapabilityParams = null);
 public sealed record ConversationIntent(string Type, string Mode, string Title, string Prompt, double Confidence);
 public sealed record ProviderRequest(string Name, string BaseUrl, string ApiKey, string ChatModelName, string ImageModelName);
 public sealed record ProviderResponse(long Id, string Name, string BaseUrl, string ChatModelName, string ImageModelName, bool Enabled, bool HasApiKey, string ApiKeyPreview);
