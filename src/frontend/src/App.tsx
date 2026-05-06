@@ -76,7 +76,6 @@ import {
   Mic,
   MoreHorizontal,
   Music,
-  Network,
   PanelRightOpen,
   Plus,
   Podcast,
@@ -91,7 +90,6 @@ import {
   Table as TableIcon,
   Trash2,
   Undo2,
-  Upload,
   UserPlus,
   Users,
   Video,
@@ -956,15 +954,6 @@ function App() {
 
     event.preventDefault()
     void submitMessage(draft.trim())
-  }
-
-  function applyOfficeDraft(kind: 'ppt' | 'docx') {
-    const source = draft.trim()
-    const instruction = kind === 'ppt'
-      ? '请把下面内容整理成一份可直接导出为 PPTX 的中文演示稿。要求：先给封面标题，再按页输出，每页包含页标题和 3-5 个要点，控制文字密度，适合商务汇报。\n\n'
-      : '请把下面内容整理成一份可直接导出为 DOCX 的中文文档。要求：结构清晰，包含标题、摘要、分节标题、列表和结论，语言正式但不要啰嗦。\n\n'
-    setAgentOptions((current) => ({ ...current, intentMode: 'document', outputFormat: kind === 'ppt' ? 'pptx' : 'docx' }))
-    setDraft(source ? `${instruction}${source}` : instruction)
   }
 
   function applyCapability(key: CapabilityKey) {
@@ -3343,37 +3332,43 @@ function App() {
                 ))}
               </div>
             )}
-            <div className="capability-row" aria-label="常用能力">
-              <label className="capability-add" title="上传图片或文件">
-                <Plus size={19} />
-                <input type="file" multiple onChange={(e) => uploadFiles(e.target.files)} />
-              </label>
-              <span className="capability-divider" />
-              {primaryCapabilities.map((item) => (
-                <button className="capability-button" type="button" key={item.key} onClick={() => applyCapability(item.key)}>
-                  {item.icon}
-                  {item.label}
-                </button>
-              ))}
-              <div className="capability-more">
-                <button
-                  className={isToolMenuOpen ? 'capability-button active' : 'capability-button'}
-                  type="button"
-                  onClick={() => setIsToolMenuOpen((value) => !value)}
-                >
-                  <MoreHorizontal size={17} />
-                  更多
-                </button>
-                {isToolMenuOpen && (
-                  <div className="capability-menu">
-                    {moreCapabilities.map((item) => (
-                      <button type="button" key={item.key} onClick={() => applyCapability(item.key)}>
-                        {item.icon}
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
+            <div className="composer-bottom-row">
+              <div className="capability-row" aria-label="常用能力">
+                <label className="capability-add" title="上传图片或文件">
+                  <Plus size={19} />
+                  <input type="file" multiple onChange={(e) => uploadFiles(e.target.files)} />
+                </label>
+                <span className="capability-divider" />
+                {primaryCapabilities.map((item) => (
+                  <button className="capability-button" type="button" key={item.key} onClick={() => applyCapability(item.key)}>
+                    {item.icon}
+                    {item.label}
+                  </button>
+                ))}
+                <div className="capability-more">
+                  <button
+                    className={isToolMenuOpen ? 'capability-button active' : 'capability-button'}
+                    type="button"
+                    onClick={() => setIsToolMenuOpen((value) => !value)}
+                  >
+                    <MoreHorizontal size={17} />
+                    更多
+                  </button>
+                  {isToolMenuOpen && (
+                    <div className="capability-menu">
+                      {moreCapabilities.map((item) => (
+                        <button type="button" key={item.key} onClick={() => applyCapability(item.key)}>
+                          {item.icon}
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="composer-submit">
+                {uploadStatus && <span>{uploadStatus}</span>}
+                <button className="send-circle" type="submit" disabled={isStreaming} title="发送"><Send size={22} /></button>
               </div>
             </div>
             <div className="style-preset-row compact-style-row" aria-label="内容风格">
@@ -3387,38 +3382,6 @@ function App() {
                   {preset.label}
                 </button>
               ))}
-            </div>
-            <div className="composer-bar">
-              <div className="composer-actions">
-                <button
-                  className={agentOptions.thinkingMode === 'deep' ? 'pill active' : 'pill'}
-                  type="button"
-                  onClick={() => setAgentOptions({ ...agentOptions, thinkingMode: agentOptions.thinkingMode === 'deep' ? 'normal' : 'deep' })}
-                >
-                  <Network size={16} />
-                  深度思考
-                </button>
-                <button
-                  className={agentOptions.enableWebSearch ? 'pill active search' : 'pill search'}
-                  type="button"
-                  onClick={() => setAgentOptions({ ...agentOptions, enableWebSearch: !agentOptions.enableWebSearch })}
-                >
-                  <Globe2 size={16} />
-                  智能搜索
-                </button>
-                <button className="pill office" type="button" onClick={() => applyOfficeDraft('docx')}>
-                  <FileText size={16} />
-                  DOCX稿
-                </button>
-              </div>
-              <div className="composer-submit">
-                {uploadStatus && <span>{uploadStatus}</span>}
-                <label className="icon-upload" title="上传图片或文件">
-                  <Upload size={21} />
-                  <input type="file" multiple onChange={(e) => uploadFiles(e.target.files)} />
-                </label>
-                <button className="send-circle" type="submit" disabled={isStreaming} title="发送"><Send size={22} /></button>
-              </div>
             </div>
           </div>
         </form>

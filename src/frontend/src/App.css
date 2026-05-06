@@ -6382,7 +6382,17 @@ button {
   color: #b8b8bd !important;
 }
 
+.composer-bottom-row {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: auto;
+}
+
 .capability-row {
+  flex: 1 1 auto;
   gap: 6px !important;
   padding-top: 4px !important;
 }
@@ -6441,6 +6451,7 @@ button {
 }
 
 .composer-submit {
+  flex: 0 0 auto !important;
   margin-left: auto !important;
   gap: 10px !important;
 }
