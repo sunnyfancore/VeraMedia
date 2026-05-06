@@ -131,6 +131,15 @@ const moreCapabilities: Array<{ key: CapabilityKey; label: string; icon: ReactNo
   { key: 'ppt', label: 'PPT 生成', icon: <Presentation size={17} /> },
 ]
 
+const imageRatios = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const
+const imageStyles = ['默认', '写实摄影', '商业海报', '插画', '3D 渲染', '国潮'] as const
+const imageTemplates = [
+  { value: 'none', label: '模板', prompt: '' },
+  { value: 'cover', label: '封面图', prompt: '生成一张适合中文内容平台的封面图，主体明确，画面有传播感。' },
+  { value: 'poster', label: '营销海报', prompt: '生成一张商业营销海报，构图简洁，突出核心产品或主题。' },
+  { value: 'scene', label: '场景图', prompt: '生成一张真实场景图，人物、环境和光线自然，有生活细节。' },
+] as const
+
 type ConfirmOptions = {
   title: string
   message: string
@@ -343,6 +352,9 @@ function App() {
     showThinking: true,
     intentMode: 'auto' as IntentMode,
     stylePreset: 'balanced' as StylePreset,
+    imageRatio: '1:1',
+    imageStyle: '默认',
+    imageTemplate: 'none',
   })
 
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -956,10 +968,17 @@ function App() {
 
   function applyCapability(key: CapabilityKey) {
     const source = draft.trim()
+    if (key === 'image') {
+      setIsToolMenuOpen(false)
+      setAgentOptions((current) => ({ ...current, intentMode: 'image' }))
+      setDraft(source)
+      return
+    }
+
     const instruction: Record<CapabilityKey, string> = {
       quick: '请快速理解我的需求，并直接给出可执行结果：\n\n',
       write: '请帮我写作下面内容，要求结构清楚、表达自然、可直接使用：\n\n',
-      image: '请根据下面需求生成图片，并给出适合图像模型的清晰提示词：\n\n',
+      image: '',
       code: '请作为编程助手处理下面问题，优先给出可运行方案和关键代码：\n\n',
       translate: '请把下面内容翻译成目标语言，并保留原意、语气和格式：\n\n',
       research: '请进行深入研究，先拆解问题，再结合可验证信息给出结论、依据和建议：\n\n',
@@ -972,7 +991,6 @@ function App() {
     setIsToolMenuOpen(false)
     setAgentOptions((current) => {
       const next = { ...current }
-      if (key === 'image') next.intentMode = 'image'
       if (key === 'write') next.intentMode = 'article'
       if (key === 'ppt') {
         next.intentMode = 'document'
@@ -985,6 +1003,17 @@ function App() {
       return next
     })
     setDraft(source ? `${instruction[key]}${source}` : instruction[key])
+  }
+
+  function leaveImageMode() {
+    setAgentOptions((current) => ({ ...current, intentMode: 'auto' }))
+  }
+
+  function applyImageTemplate(value: string) {
+    const template = imageTemplates.find((item) => item.value === value)
+    setAgentOptions((current) => ({ ...current, imageTemplate: value }))
+    if (!template?.prompt) return
+    setDraft((current) => current.trim() ? `${template.prompt}\n\n${current}` : template.prompt)
   }
 
   async function submitMessage(content: string) {
@@ -3421,7 +3450,7 @@ function App() {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleComposerKeyDown}
               onPaste={(event) => void handleComposerPaste(event)}
-              placeholder="发消息，粘贴图片，或拖入文件..."
+              placeholder={agentOptions.intentMode === 'image' ? '描述你想要的图片' : '发消息，粘贴图片，或拖入文件...'}
             />
             {attachments.length > 0 && (
               <div className="attachment-row">
@@ -3436,39 +3465,78 @@ function App() {
               </div>
             )}
             <div className="composer-bottom-row">
-              <div className="capability-row" aria-label="常用能力">
-                <label className="capability-add" title="上传图片或文件">
-                  <Plus size={19} />
-                  <input type="file" multiple onChange={(e) => uploadFiles(e.target.files)} />
-                </label>
-                <span className="capability-divider" />
-                {primaryCapabilities.map((item) => (
-                  <button className="capability-button" type="button" key={item.key} onClick={() => applyCapability(item.key)}>
-                    {item.icon}
-                    {item.label}
-                  </button>
-                ))}
-                <div className="capability-more">
-                  <button
-                    className={isToolMenuOpen ? 'capability-button active' : 'capability-button'}
-                    type="button"
-                    onClick={() => setIsToolMenuOpen((value) => !value)}
-                  >
-                    <MoreHorizontal size={17} />
-                    更多
-                  </button>
-                  {isToolMenuOpen && (
-                    <div className="capability-menu">
-                      {moreCapabilities.map((item) => (
-                        <button type="button" key={item.key} onClick={() => applyCapability(item.key)}>
-                          {item.icon}
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+              {agentOptions.intentMode === 'image' ? (
+                <div className="capability-row image-tool-row" aria-label="图像生成设置">
+                  <span className="image-mode-chip">
+                    <ImagePlus size={17} />
+                    图像生成
+                    <button type="button" title="退出图像生成" onClick={leaveImageMode}><X size={14} /></button>
+                  </span>
+                  <label className="capability-button image-reference-button" title="上传参考图">
+                    <LinkIcon size={17} />
+                    参考图
+                    <input type="file" accept="image/*" multiple onChange={(e) => uploadFiles(e.target.files)} />
+                  </label>
+                  <span className="image-select-wrap">
+                    <Sparkles size={17} />
+                    <select value={provider.imageModelName || '图像模型'} onChange={() => undefined} title="当前图像模型">
+                      <option>{provider.imageModelName || '图像模型'}</option>
+                    </select>
+                  </span>
+                  <span className="image-select-wrap">
+                    <PanelRightOpen size={17} />
+                    <select value={agentOptions.imageRatio} onChange={(e) => setAgentOptions({ ...agentOptions, imageRatio: e.target.value })} title="图片比例">
+                      {imageRatios.map((ratio) => <option key={ratio} value={ratio}>{ratio}</option>)}
+                    </select>
+                  </span>
+                  <span className="image-select-wrap">
+                    <CircleHelp size={17} />
+                    <select value={agentOptions.imageStyle} onChange={(e) => setAgentOptions({ ...agentOptions, imageStyle: e.target.value })} title="图片风格">
+                      {imageStyles.map((style) => <option key={style} value={style}>{style}</option>)}
+                    </select>
+                  </span>
+                  <span className="image-select-wrap">
+                    <ExternalLink size={17} />
+                    <select value={agentOptions.imageTemplate} onChange={(e) => applyImageTemplate(e.target.value)} title="图片模板">
+                      {imageTemplates.map((template) => <option key={template.value} value={template.value}>{template.label}</option>)}
+                    </select>
+                  </span>
                 </div>
-              </div>
+              ) : (
+                <div className="capability-row" aria-label="常用能力">
+                  <label className="capability-add" title="上传图片或文件">
+                    <Plus size={19} />
+                    <input type="file" multiple onChange={(e) => uploadFiles(e.target.files)} />
+                  </label>
+                  <span className="capability-divider" />
+                  {primaryCapabilities.map((item) => (
+                    <button className="capability-button" type="button" key={item.key} onClick={() => applyCapability(item.key)}>
+                      {item.icon}
+                      {item.label}
+                    </button>
+                  ))}
+                  <div className="capability-more">
+                    <button
+                      className={isToolMenuOpen ? 'capability-button active' : 'capability-button'}
+                      type="button"
+                      onClick={() => setIsToolMenuOpen((value) => !value)}
+                    >
+                      <MoreHorizontal size={17} />
+                      更多
+                    </button>
+                    {isToolMenuOpen && (
+                      <div className="capability-menu">
+                        {moreCapabilities.map((item) => (
+                          <button type="button" key={item.key} onClick={() => applyCapability(item.key)}>
+                            {item.icon}
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="composer-submit">
                 {uploadStatus && <span>{uploadStatus}</span>}
                 <button className="send-circle" type="submit" disabled={isStreaming} title="发送"><Send size={22} /></button>

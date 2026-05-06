@@ -64,7 +64,7 @@ public sealed partial class ConversationIntentRouter(IAiChatClient chatClient) :
             type,
             GetRenderMode(type),
             BuildTitle(text, DefaultTitle(type)),
-            type == "image" ? BuildImagePrompt(text) : text,
+            type == "image" ? BuildImagePrompt(text, request.Options, request.Attachments) : text,
             1.0);
     }
 
@@ -227,9 +227,20 @@ public sealed partial class ConversationIntentRouter(IAiChatClient chatClient) :
         return HasAny(text, "为什么", "是不是", "是否", "怎么回事", "怎么办", "如何", "能否", "能不能", "会不会", "怎么做", "问题", "不对");
     }
 
-    private static string BuildImagePrompt(string userRequest)
+    private static string BuildImagePrompt(string userRequest, AgentOptionsDto? options = null, IReadOnlyList<AttachmentDto>? attachments = null)
     {
+        var ratio = string.IsNullOrWhiteSpace(options?.ImageRatio) ? "1:1" : options.ImageRatio.Trim();
+        var style = string.IsNullOrWhiteSpace(options?.ImageStyle) ? "默认" : options.ImageStyle.Trim();
+        var template = string.IsNullOrWhiteSpace(options?.ImageTemplate) || options.ImageTemplate == "none" ? "无" : options.ImageTemplate.Trim();
+        var references = attachments?.Where(x => x.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            .Select(x => $"{x.FileName} ({x.Url})")
+            .ToArray() ?? [];
+        var referenceText = references.Length == 0 ? "无" : string.Join("；", references);
         return $"""
+            图片比例：{ratio}
+            视觉风格：{style}
+            模板类型：{template}
+            参考图片：{referenceText}
             根据用户需求生成一张图片。
             用户需求：{userRequest}
             视觉要求：严格遵循用户指定的主体、风格、画面元素和氛围；画面清晰，有细节，有完整构图；不要出现可读文字、水印、品牌 Logo。

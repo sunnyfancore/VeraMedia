@@ -6561,6 +6561,77 @@ button {
   font-weight: 600 !important;
 }
 
+.image-tool-row {
+  flex-wrap: nowrap !important;
+  overflow-x: auto !important;
+}
+
+.image-tool-row::-webkit-scrollbar {
+  height: 0;
+}
+
+.image-mode-chip,
+.image-select-wrap {
+  flex: 0 0 auto;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 10px;
+  padding: 0 9px;
+  color: #18181b;
+  font-size: 14px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.image-mode-chip {
+  color: #155eef;
+  background: #edf4ff;
+}
+
+.image-mode-chip button {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  color: #155eef;
+  background: transparent;
+}
+
+.image-mode-chip button:hover {
+  background: rgba(21, 94, 239, 0.1);
+}
+
+.image-reference-button {
+  cursor: pointer;
+}
+
+.image-reference-button input {
+  display: none;
+}
+
+.image-select-wrap {
+  background: transparent;
+}
+
+.image-select-wrap:hover {
+  background: #f4f4f5;
+}
+
+.image-select-wrap select {
+  max-width: 128px;
+  border: 0;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
 .capability-add:hover,
 .capability-button:hover,
 .capability-button.active {
