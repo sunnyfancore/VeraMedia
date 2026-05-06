@@ -6016,14 +6016,63 @@ button {
 
 .brand-chip {
   min-width: 0;
-  height: 36px;
+  height: 40px;
   display: inline-flex !important;
   align-items: center;
-  gap: 8px !important;
-  border-radius: 10px;
-  padding: 0 9px;
+  gap: 10px !important;
+  border-radius: 12px;
+  padding: 0 12px 0 9px;
   background: #fff;
   box-shadow: 0 1px 5px rgba(15, 23, 42, 0.04);
+}
+
+.brand-logo-mark {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background:
+    radial-gradient(circle at 70% 22%, rgba(255, 118, 155, 0.95) 0 10%, transparent 11%),
+    linear-gradient(135deg, #2f7cff 0%, #36d6c4 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5), 0 6px 14px rgba(47, 124, 255, 0.2);
+}
+
+.brand-logo-mark::before,
+.brand-logo-mark::after,
+.brand-logo-mark span {
+  content: "";
+  position: absolute;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.brand-logo-mark::before {
+  width: 14px;
+  height: 3px;
+  left: 7px;
+  top: 9px;
+  transform: rotate(-20deg);
+}
+
+.brand-logo-mark::after {
+  width: 14px;
+  height: 3px;
+  right: 6px;
+  bottom: 9px;
+  transform: rotate(-20deg);
+  opacity: 0.92;
+}
+
+.brand-logo-mark span {
+  width: 3px;
+  height: 15px;
+  left: 12px;
+  top: 7px;
+  transform: rotate(20deg);
+  opacity: 0.96;
 }
 
 .brand-avatar {
@@ -6047,8 +6096,9 @@ button {
 .brand-chip strong {
   overflow: hidden;
   color: #111827 !important;
-  font-size: 15px !important;
-  font-weight: 700 !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0 !important;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

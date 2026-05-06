@@ -2302,8 +2302,10 @@ function App() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="brand-chip">
-            <span className="brand-avatar">{(user.displayName || user.email || 'V').slice(0, 1)}</span>
-            <strong>VeraMedia</strong>
+            <span className="brand-logo-mark" aria-hidden="true">
+              <span />
+            </span>
+            <strong>内容运营助手</strong>
           </div>
           <div className="sidebar-actions">
             <button title="设置" onClick={openSettings}><Settings size={18} /></button>
