@@ -76,12 +76,9 @@ import {
   Mail,
   Menu,
   MessageSquarePlus,
-  Mic,
   MoreHorizontal,
-  Music,
   PanelRightOpen,
   Plus,
-  Podcast,
   Presentation,
   Quote,
   Redo2,
@@ -97,7 +94,6 @@ import {
   Undo2,
   UserPlus,
   Users,
-  Video,
   X,
   Zap,
   Languages,
@@ -117,7 +113,7 @@ const stylePresets = [
 ] as const
 
 type StylePreset = typeof stylePresets[number]['value']
-type CapabilityKey = 'quick' | 'write' | 'image' | 'code' | 'translate' | 'video' | 'music' | 'meeting' | 'research' | 'podcast' | 'qa' | 'data' | 'super' | 'ppt'
+type CapabilityKey = 'quick' | 'write' | 'image' | 'code' | 'translate' | 'research' | 'qa' | 'data' | 'super' | 'ppt'
 
 const primaryCapabilities: Array<{ key: CapabilityKey; label: string; icon: ReactNode }> = [
   { key: 'quick', label: '快速', icon: <Zap size={17} /> },
@@ -125,14 +121,10 @@ const primaryCapabilities: Array<{ key: CapabilityKey; label: string; icon: Reac
   { key: 'image', label: '图像生成', icon: <ImagePlus size={17} /> },
   { key: 'code', label: '编程', icon: <Braces size={17} /> },
   { key: 'translate', label: '翻译', icon: <Languages size={17} /> },
-  { key: 'video', label: '视频生成', icon: <Video size={17} /> },
 ]
 
 const moreCapabilities: Array<{ key: CapabilityKey; label: string; icon: ReactNode }> = [
-  { key: 'music', label: '音乐生成', icon: <Music size={17} /> },
-  { key: 'meeting', label: '记录会议', icon: <Mic size={17} /> },
   { key: 'research', label: '深入研究', icon: <Globe2 size={17} /> },
-  { key: 'podcast', label: 'AI 播客', icon: <Podcast size={17} /> },
   { key: 'qa', label: '解题答疑', icon: <CircleHelp size={17} /> },
   { key: 'data', label: '数据分析', icon: <ChartColumn size={17} /> },
   { key: 'super', label: '超能模式', icon: <Sparkles size={17} /> },
@@ -970,11 +962,7 @@ function App() {
       image: '请根据下面需求生成图片，并给出适合图像模型的清晰提示词：\n\n',
       code: '请作为编程助手处理下面问题，优先给出可运行方案和关键代码：\n\n',
       translate: '请把下面内容翻译成目标语言，并保留原意、语气和格式：\n\n',
-      video: '请把下面需求整理成视频生成方案，包含脚本、镜头、画面和旁白：\n\n',
-      music: '请把下面需求整理成音乐生成提示，包含风格、情绪、节奏、乐器和歌词方向：\n\n',
-      meeting: '请帮我整理会议记录，输出议题、结论、待办、负责人和时间节点：\n\n',
       research: '请进行深入研究，先拆解问题，再结合可验证信息给出结论、依据和建议：\n\n',
-      podcast: '请把下面内容改写成 AI 播客脚本，包含开场、分段对话和结尾总结：\n\n',
       qa: '请逐步解答下面问题，说明关键思路，并给出最终答案：\n\n',
       data: '请分析下面数据或材料，输出洞察、趋势、异常点和行动建议：\n\n',
       super: '请用深度思考模式处理下面复杂任务，先规划，再给出完整结果：\n\n',
