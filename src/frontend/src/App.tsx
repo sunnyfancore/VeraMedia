@@ -2370,7 +2370,7 @@ function App() {
     return (
       <main className="auth-shell">
         <section className="auth-panel">
-          <div className="brand-mark"><Bot size={28} /></div>
+          <div className="brand-mark"><span /></div>
           <h1>内容运营助手</h1>
           <p>用对话完成选题、成文、配图和内容修改。</p>
           <form onSubmit={submitAuth} className="auth-form" autoComplete="off">
@@ -3341,7 +3341,7 @@ function App() {
         <div className="messages" ref={messagesRef}>
           {messages.length === 0 && (
             <div className="empty-state">
-              <Bot size={38} />
+              <span className="empty-brand-mark"><span /></span>
               <h2>开始使用 AI 工作台</h2>
               <p>输入问题、选题、文章素材或图片需求，AI 会按任务类型给出结果。</p>
             </div>
