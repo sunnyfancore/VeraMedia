@@ -818,6 +818,14 @@ function App() {
     setIsMobileNavOpen(false)
   }
 
+  async function openConversationFromSidebar(id: number) {
+    savedScrollRef.current = null
+    setActivePage('chat')
+    setIsSettingsOpen(false)
+    setIsMobileNavOpen(false)
+    await loadMessages(id)
+  }
+
   function openSettings() {
     rememberChatScroll()
     setIsMobileNavOpen(false)
@@ -2338,7 +2346,7 @@ function App() {
         <div className="conversation-list">
           {conversations.map((item) => (
             <div className={item.id === conversationId ? 'conversation-item active' : 'conversation-item'} key={item.id}>
-              <button className="conversation-open" type="button" onClick={() => { setIsMobileNavOpen(false); loadMessages(item.id) }}>
+              <button className="conversation-open" type="button" onClick={() => void openConversationFromSidebar(item.id)}>
                 {item.title}
               </button>
               <button className="conversation-delete" type="button" title="删除会话" onClick={() => deleteConversation(item)}>
