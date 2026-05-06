@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState, useCallback } from 'react'
-import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
+import type { ClipboardEvent, DragEvent, FormEvent, KeyboardEvent, ReactNode } from 'react'
 import { useLayoutEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -16,7 +16,6 @@ import {
   getDocumentExcerpt,
   getDocumentTitle,
   getGeneratingImageTitle,
-  intentModeOptions,
   isArticleMessageMode,
   isArticleLike,
   readServerSentEvents,
@@ -74,8 +73,13 @@ import {
   Mail,
   Menu,
   MessageSquarePlus,
+  Mic,
+  MoreHorizontal,
+  Music,
   Network,
   PanelRightOpen,
+  Plus,
+  Podcast,
   Presentation,
   Quote,
   Redo2,
@@ -83,13 +87,19 @@ import {
   Save,
   Send,
   Settings,
+  Sparkles,
   Table as TableIcon,
   Trash2,
   Undo2,
   Upload,
   UserPlus,
   Users,
+  Video,
   X,
+  Zap,
+  Languages,
+  CircleHelp,
+  ChartColumn,
 } from 'lucide-react'
 import './App.css'
 
@@ -103,6 +113,27 @@ const stylePresets = [
 ] as const
 
 type StylePreset = typeof stylePresets[number]['value']
+type CapabilityKey = 'quick' | 'write' | 'image' | 'code' | 'translate' | 'video' | 'music' | 'meeting' | 'research' | 'podcast' | 'qa' | 'data' | 'super' | 'ppt'
+
+const primaryCapabilities: Array<{ key: CapabilityKey; label: string; icon: ReactNode }> = [
+  { key: 'quick', label: '快速', icon: <Zap size={17} /> },
+  { key: 'write', label: '帮我写作', icon: <FileText size={17} /> },
+  { key: 'image', label: '图像生成', icon: <ImagePlus size={17} /> },
+  { key: 'code', label: '编程', icon: <Braces size={17} /> },
+  { key: 'translate', label: '翻译', icon: <Languages size={17} /> },
+  { key: 'video', label: '视频生成', icon: <Video size={17} /> },
+]
+
+const moreCapabilities: Array<{ key: CapabilityKey; label: string; icon: ReactNode }> = [
+  { key: 'music', label: '音乐生成', icon: <Music size={17} /> },
+  { key: 'meeting', label: '记录会议', icon: <Mic size={17} /> },
+  { key: 'research', label: '深入研究', icon: <Globe2 size={17} /> },
+  { key: 'podcast', label: 'AI 播客', icon: <Podcast size={17} /> },
+  { key: 'qa', label: '解题答疑', icon: <CircleHelp size={17} /> },
+  { key: 'data', label: '数据分析', icon: <ChartColumn size={17} /> },
+  { key: 'super', label: '超能模式', icon: <Sparkles size={17} /> },
+  { key: 'ppt', label: 'PPT 生成', icon: <Presentation size={17} /> },
+]
 
 type ConfirmOptions = {
   title: string
@@ -221,6 +252,8 @@ function App() {
   const activeJobIdsRef = useRef<Set<number>>(new Set())
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [uploadStatus, setUploadStatus] = useState('')
+  const [isToolMenuOpen, setIsToolMenuOpen] = useState(false)
+  const [isComposerDragging, setIsComposerDragging] = useState(false)
 
   const [activePage, setActivePage] = useState<'chat' | 'admin' | 'editor' | 'tasks' | 'assets' | 'images'>('chat')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -587,7 +620,7 @@ function App() {
     }
   }
 
-  async function uploadFiles(files: FileList | null) {
+  async function uploadFiles(files: FileList | File[] | null) {
     if (!files?.length) return
     setUploadStatus('上传中...')
     try {
@@ -596,6 +629,27 @@ function App() {
       setUploadStatus(`已上传 ${uploaded.length} 个文件。`)
     } catch (error) {
       setUploadStatus(error instanceof Error ? error.message : '上传失败')
+    }
+  }
+
+  async function handleComposerPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const files = Array.from(event.clipboardData.files)
+    if (!files.length) return
+
+    event.preventDefault()
+    await uploadFiles(files)
+    showToast(files.some((file) => file.type.startsWith('image/')) ? '已从剪贴板添加图片' : '已从剪贴板添加文件')
+  }
+
+  async function handleComposerDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setIsComposerDragging(false)
+    await uploadFiles(event.dataTransfer.files)
+  }
+
+  function handleComposerDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setIsComposerDragging(false)
     }
   }
 
@@ -903,6 +957,43 @@ function App() {
       : '请把下面内容整理成一份可直接导出为 DOCX 的中文文档。要求：结构清晰，包含标题、摘要、分节标题、列表和结论，语言正式但不要啰嗦。\n\n'
     setAgentOptions((current) => ({ ...current, intentMode: 'document', outputFormat: kind === 'ppt' ? 'pptx' : 'docx' }))
     setDraft(source ? `${instruction}${source}` : instruction)
+  }
+
+  function applyCapability(key: CapabilityKey) {
+    const source = draft.trim()
+    const instruction: Record<CapabilityKey, string> = {
+      quick: '请快速理解我的需求，并直接给出可执行结果：\n\n',
+      write: '请帮我写作下面内容，要求结构清楚、表达自然、可直接使用：\n\n',
+      image: '请根据下面需求生成图片，并给出适合图像模型的清晰提示词：\n\n',
+      code: '请作为编程助手处理下面问题，优先给出可运行方案和关键代码：\n\n',
+      translate: '请把下面内容翻译成目标语言，并保留原意、语气和格式：\n\n',
+      video: '请把下面需求整理成视频生成方案，包含脚本、镜头、画面和旁白：\n\n',
+      music: '请把下面需求整理成音乐生成提示，包含风格、情绪、节奏、乐器和歌词方向：\n\n',
+      meeting: '请帮我整理会议记录，输出议题、结论、待办、负责人和时间节点：\n\n',
+      research: '请进行深入研究，先拆解问题，再结合可验证信息给出结论、依据和建议：\n\n',
+      podcast: '请把下面内容改写成 AI 播客脚本，包含开场、分段对话和结尾总结：\n\n',
+      qa: '请逐步解答下面问题，说明关键思路，并给出最终答案：\n\n',
+      data: '请分析下面数据或材料，输出洞察、趋势、异常点和行动建议：\n\n',
+      super: '请用深度思考模式处理下面复杂任务，先规划，再给出完整结果：\n\n',
+      ppt: '请把下面内容整理成一份可直接导出为 PPTX 的中文演示稿。要求：先给封面标题，再按页输出，每页包含页标题和 3-5 个要点，控制文字密度，适合商务汇报。\n\n',
+    }
+
+    setIsToolMenuOpen(false)
+    setAgentOptions((current) => {
+      const next = { ...current }
+      if (key === 'image') next.intentMode = 'image'
+      if (key === 'write') next.intentMode = 'article'
+      if (key === 'ppt') {
+        next.intentMode = 'document'
+        next.outputFormat = 'pptx'
+      }
+      if (key === 'research' || key === 'super') {
+        next.thinkingMode = 'deep'
+        next.enableWebSearch = true
+      }
+      return next
+    })
+    setDraft(source ? `${instruction[key]}${source}` : instruction[key])
   }
 
   async function submitMessage(content: string) {
@@ -3204,37 +3295,22 @@ function App() {
         </div>
 
         <form className="composer" onSubmit={sendMessage}>
-          <div className="composer-card">
-            <div className="intent-mode-row" aria-label="任务模式">
-              {intentModeOptions.map((mode) => (
-                <button
-                  key={mode.value}
-                  className={agentOptions.intentMode === mode.value ? 'intent-mode active' : 'intent-mode'}
-                  type="button"
-                  title={mode.title}
-                  onClick={() => setAgentOptions({ ...agentOptions, intentMode: mode.value })}
-                >
-                  {mode.label}
-                </button>
-              ))}
-            </div>
-            <div className="style-preset-row" aria-label="内容风格">
-              {stylePresets.map((preset) => (
-                <button
-                  key={preset.value}
-                  className={agentOptions.stylePreset === preset.value ? 'style-preset active' : 'style-preset'}
-                  type="button"
-                  onClick={() => setAgentOptions({ ...agentOptions, stylePreset: preset.value, temperature: preset.temperature })}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
+          <div
+            className={isComposerDragging ? 'composer-card dragging' : 'composer-card'}
+            onDragOver={(event) => {
+              event.preventDefault()
+              setIsComposerDragging(true)
+            }}
+            onDragLeave={handleComposerDragLeave}
+            onDrop={(event) => void handleComposerDrop(event)}
+          >
+            {isComposerDragging && <div className="composer-drop-hint">松开即可上传图片或文件</div>}
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleComposerKeyDown}
-              placeholder="输入选题、链接或内容需求..."
+              onPaste={(event) => void handleComposerPaste(event)}
+              placeholder="发消息，粘贴图片，或拖入文件..."
             />
             {attachments.length > 0 && (
               <div className="attachment-row">
@@ -3248,6 +3324,51 @@ function App() {
                 ))}
               </div>
             )}
+            <div className="capability-row" aria-label="常用能力">
+              <label className="capability-add" title="上传图片或文件">
+                <Plus size={19} />
+                <input type="file" multiple onChange={(e) => uploadFiles(e.target.files)} />
+              </label>
+              <span className="capability-divider" />
+              {primaryCapabilities.map((item) => (
+                <button className="capability-button" type="button" key={item.key} onClick={() => applyCapability(item.key)}>
+                  {item.icon}
+                  {item.label}
+                </button>
+              ))}
+              <div className="capability-more">
+                <button
+                  className={isToolMenuOpen ? 'capability-button active' : 'capability-button'}
+                  type="button"
+                  onClick={() => setIsToolMenuOpen((value) => !value)}
+                >
+                  <MoreHorizontal size={17} />
+                  更多
+                </button>
+                {isToolMenuOpen && (
+                  <div className="capability-menu">
+                    {moreCapabilities.map((item) => (
+                      <button type="button" key={item.key} onClick={() => applyCapability(item.key)}>
+                        {item.icon}
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="style-preset-row compact-style-row" aria-label="内容风格">
+              {stylePresets.map((preset) => (
+                <button
+                  key={preset.value}
+                  className={agentOptions.stylePreset === preset.value ? 'style-preset active' : 'style-preset'}
+                  type="button"
+                  onClick={() => setAgentOptions({ ...agentOptions, stylePreset: preset.value, temperature: preset.temperature })}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
             <div className="composer-bar">
               <div className="composer-actions">
                 <button
@@ -3265,10 +3386,6 @@ function App() {
                 >
                   <Globe2 size={16} />
                   智能搜索
-                </button>
-                <button className="pill office" type="button" onClick={() => applyOfficeDraft('ppt')}>
-                  <Presentation size={16} />
-                  PPT稿
                 </button>
                 <button className="pill office" type="button" onClick={() => applyOfficeDraft('docx')}>
                   <FileText size={16} />
