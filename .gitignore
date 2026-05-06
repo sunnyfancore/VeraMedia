@@ -1,0 +1,42 @@
+## .NET
+bin/
+obj/
+publish/
+
+## Node
+node_modules/
+dist/
+
+## IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+## Environment
+appsettings.Development.json
+appsettings.Production.json
+.env
+
+## Runtime data
+AppData/
+src/backend/wwwroot/assets/
+src/backend/wwwroot/index.html
+src/backend/wwwroot/favicon.svg
+src/backend/wwwroot/icons.svg
+src/backend/wwwroot/uploads/
+
+## Logs & Temp
+*.log
+*.err.log
+*.out.log
+tmp_*.html
+tmp-*
+fulltest-*.png
+fulltest-session.json
+mobile-*.png
+.edge-*/
+
+## OS
+.DS_Store
+Thumbs.db

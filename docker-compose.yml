@@ -1,0 +1,23 @@
+version: "3"
+
+networks:
+  docker-network:
+    name: docker-network
+    driver: bridge
+
+services:
+  veramedia:
+    build: .
+    working_dir: /app
+    ports:
+      - "5178:8080"
+    volumes:
+      - ./publish:/app
+      - ./AppData:/app/AppData
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    networks:
+      - docker-network
