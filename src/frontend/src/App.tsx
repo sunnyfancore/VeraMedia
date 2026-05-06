@@ -374,7 +374,7 @@ function App() {
     outputFormat: 'article',
     temperature: 0.7,
     imageCount: 3,
-    enableWebSearch: false,
+    enableWebSearch: true,
     showThinking: true,
     intentMode: 'auto' as IntentMode,
     stylePreset: 'balanced' as StylePreset,
@@ -1016,7 +1016,7 @@ function App() {
         next.intentMode = 'auto'
         next.outputFormat = 'article'
         next.thinkingMode = 'normal'
-        next.enableWebSearch = false
+        next.enableWebSearch = true
       }
       if (key === 'write') next.intentMode = 'article'
       if (key === 'image') next.intentMode = 'image'
@@ -1044,7 +1044,7 @@ function App() {
   }
 
   function leaveCapabilityMode() {
-    setAgentOptions((current) => ({ ...current, intentMode: 'auto', capability: 'quick', outputFormat: 'article', thinkingMode: 'normal', enableWebSearch: false }))
+    setAgentOptions((current) => ({ ...current, intentMode: 'auto', capability: 'quick', outputFormat: 'article', thinkingMode: 'normal', enableWebSearch: true }))
   }
 
   function updateCapabilityParam(key: string, value: string) {
