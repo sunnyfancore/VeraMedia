@@ -2313,23 +2313,23 @@ function App() {
 
         <button className={activePage === 'chat' ? 'new-chat active' : 'new-chat'} onClick={() => { goToChat(); setConversationId(null); setMessages([]) }}>
           <MessageSquarePlus size={18} />
-          新对话
+          新内容任务
         </button>
         <button className={activePage === 'tasks' ? 'new-chat active' : 'new-chat'} onClick={openTaskCenter}>
-          <ImagePlus size={18} />
-          AI 创作
+          <ListRestart size={18} />
+          任务中心
         </button>
         <button className={activePage === 'assets' ? 'new-chat active' : 'new-chat'} onClick={openAssetLibrary}>
           <FileText size={18} />
-          云盘
+          文章资产
         </button>
         <button className={activePage === 'images' ? 'new-chat active' : 'new-chat'} onClick={openImageLibrary}>
-          <Braces size={18} />
-          应用生成
+          <ImagePlus size={18} />
+          图片资产
         </button>
         <button className="new-chat" type="button" onClick={openSettings}>
-          <Sparkles size={18} />
-          发现智能体
+          <Settings size={18} />
+          模型与账号
         </button>
 
         <div className="sidebar-section-title">历史对话</div>
