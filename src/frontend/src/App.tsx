@@ -2301,9 +2301,9 @@ function App() {
     <main className={isMobileNavOpen ? 'workspace mobile-nav-open' : 'workspace'}>
       <aside className="sidebar">
         <div className="sidebar-header">
-          <div>
-            <strong>内容运营助手</strong>
-            <span>{user.displayName || '运营同学'}</span>
+          <div className="brand-chip">
+            <span className="brand-avatar">{(user.displayName || user.email || 'V').slice(0, 1)}</span>
+            <strong>VeraMedia</strong>
           </div>
           <div className="sidebar-actions">
             <button title="设置" onClick={openSettings}><Settings size={18} /></button>
@@ -2313,21 +2313,26 @@ function App() {
 
         <button className={activePage === 'chat' ? 'new-chat active' : 'new-chat'} onClick={() => { goToChat(); setConversationId(null); setMessages([]) }}>
           <MessageSquarePlus size={18} />
-          新内容任务
+          新对话
         </button>
         <button className={activePage === 'tasks' ? 'new-chat active' : 'new-chat'} onClick={openTaskCenter}>
-          <ListRestart size={18} />
-          任务中心
+          <ImagePlus size={18} />
+          AI 创作
         </button>
         <button className={activePage === 'assets' ? 'new-chat active' : 'new-chat'} onClick={openAssetLibrary}>
-          <Braces size={18} />
-          资产库
+          <FileText size={18} />
+          云盘
         </button>
         <button className={activePage === 'images' ? 'new-chat active' : 'new-chat'} onClick={openImageLibrary}>
-          <ImagePlus size={18} />
-          图片资产
+          <Braces size={18} />
+          应用生成
+        </button>
+        <button className="new-chat" type="button" onClick={openSettings}>
+          <Sparkles size={18} />
+          发现智能体
         </button>
 
+        <div className="sidebar-section-title">历史对话</div>
         <div className="conversation-list">
           {conversations.map((item) => (
             <div className={item.id === conversationId ? 'conversation-item active' : 'conversation-item'} key={item.id}>
@@ -2340,6 +2345,10 @@ function App() {
             </div>
           ))}
         </div>
+        <button className="sidebar-user" type="button" onClick={openSettings}>
+          <span className="brand-avatar small">{(user.displayName || user.email || '你').slice(0, 1)}</span>
+          <span>{user.displayName || user.email || 'SunnyFan'}</span>
+        </button>
       </aside>
       <button className="mobile-nav-backdrop" type="button" aria-label="关闭会话列表" onClick={() => setIsMobileNavOpen(false)} />
 
