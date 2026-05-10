@@ -41,8 +41,7 @@ public sealed class ConversationsController(
     ILogger<ConversationsController> logger) : ControllerBase
 {
     private const long MaxPptVideoUploadSize = 100 * 1024 * 1024;
-    private const int MaxPptDialogueAiSlidesPerRequest = 6;
-    private const int DefaultPptDialogueAiTimeoutSeconds = 25;
+    private const int MaxPptDialogueAiSlidesPerRequest = 12;
     private sealed record PptVideoPreviewSlide(int Index, string Title, string Notes);
     public sealed record PptVideoDialogueScriptSlide(int Index, string? Title, string? Notes);
     public sealed record PptVideoDialogueScriptRequest(IReadOnlyList<PptVideoDialogueScriptSlide>? Slides, string? Style = null);
@@ -229,9 +228,8 @@ public sealed class ConversationsController(
         {
             if (slides.Count <= MaxPptDialogueAiSlidesPerRequest)
             {
-                using var aiCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                aiCts.CancelAfter(TimeSpan.FromSeconds(GetPptDialogueAiTimeoutSeconds()));
-                var aiSlides = await TryGeneratePptDialogueScriptAsync(User.GetUserId(), slides, request.Style, aiCts.Token);
+                using var aiCts = CreateOptionalPptDialogueAiTimeout(cancellationToken);
+                var aiSlides = await TryGeneratePptDialogueScriptAsync(User.GetUserId(), slides, request.Style, aiCts?.Token ?? cancellationToken);
                 if (aiSlides.Count > 0)
                 {
                     return Ok(new PptVideoDialogueScriptResponse(
@@ -243,7 +241,7 @@ public sealed class ConversationsController(
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            logger.LogWarning("AI dialogue script generation timed out after {Seconds}s, using local fallback", GetPptDialogueAiTimeoutSeconds());
+            logger.LogWarning("AI dialogue script generation timed out, using local fallback");
         }
         catch (Exception ex)
         {
@@ -464,12 +462,15 @@ public sealed class ConversationsController(
         return result;
     }
 
-    private static int GetPptDialogueAiTimeoutSeconds()
+    private static CancellationTokenSource? CreateOptionalPptDialogueAiTimeout(CancellationToken cancellationToken)
     {
         var value = Environment.GetEnvironmentVariable("VERAMEDIA_PPT_DIALOGUE_AI_TIMEOUT_SECONDS");
-        return int.TryParse(value, out var seconds)
-            ? Math.Clamp(seconds, 8, 55)
-            : DefaultPptDialogueAiTimeoutSeconds;
+        if (!int.TryParse(value, out var seconds) || seconds <= 0)
+            return null;
+
+        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Clamp(seconds, 15, 600)));
+        return cts;
     }
 
     private static string TrimForDialoguePrompt(string? value, int maxLength)

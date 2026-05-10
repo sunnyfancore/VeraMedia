@@ -2962,7 +2962,7 @@ function App() {
     }
 
     const sourceSlides = pptVideoSlides
-    const batchSize = 4
+    const batchSize = 2
     let aiGeneratedCount = 0
     let fallbackCount = 0
 
@@ -2987,13 +2987,10 @@ function App() {
         const done = Math.min(start + batch.length, sourceSlides.length)
         setPptVideoStatus(`正在优化对话稿 (${done}/${sourceSlides.length})`)
 
-        const controller = new AbortController()
-        const timer = window.setTimeout(() => controller.abort(), 38000)
         try {
           const response = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/dialogue-script`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            signal: controller.signal,
             body: JSON.stringify({
               style: '自然、专业、像两位真实讲解者在围绕页面内容交流',
               slides: batch.map((slide) => ({
@@ -3026,8 +3023,6 @@ function App() {
           applyGeneratedNotes(notesBySlide)
         } catch {
           applyFallbackNotes(batch)
-        } finally {
-          window.clearTimeout(timer)
         }
       }
 
