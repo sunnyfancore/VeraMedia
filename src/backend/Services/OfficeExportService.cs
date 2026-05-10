@@ -363,6 +363,10 @@ public sealed partial class OfficeExportService : IOfficeExportService
             new P.GroupShapeProperties(new A.TransformGroup()));
 
         var layout = (slide.Layout ?? "").Trim().ToLowerInvariant();
+        if (!slide.IsCover && IsComparisonSlide(slide))
+        {
+            layout = "comparison";
+        }
         var gradAngle = 5400000 + rng.Next(-2700000, 2700000);
 
         if (slide.IsCover || layout.Contains("cover"))
@@ -504,6 +508,25 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 shapeTree.Append(CreateRectShape((uint)(21 + i * 3), $"Summary Accent {i}", x + 150000, y, 3000000, 80000, accent));
                 shapeTree.Append(CreateTextShape((uint)(22 + i * 3), $"Summary Text {i}", summaryItems[i], x + 240000, y + 260000, 2860000, 760000, 1280, true, false, fontColor: palette.Body));
             }
+            shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
+            shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
+        }
+        else if (layout.Contains("comparison"))
+        {
+            shapeTree.Append(CreateRectShape(2, "Background", 0, 0, 12192000, 6858000, palette.LightBackground));
+            shapeTree.Append(CreateGradientRectShape(3, "Top Bar", 0, 0, 12192000, 220000, palette.Accent, palette.Secondary, 0));
+            AddSlideDecorations(shapeTree, palette, index, 95, false);
+            shapeTree.Append(CreateRectShape(4, "Title Rail", 560000, 650000, 80000, 680000, palette.Secondary));
+            shapeTree.Append(CreateTextShape(5, "Title", slide.Title, 760000, 510000, 10300000, 760000, 2520, true, false, fontColor: palette.Title));
+            if (!string.IsNullOrWhiteSpace(slide.Subtitle))
+            {
+                shapeTree.Append(CreateTextShape(6, "Subtitle", slide.Subtitle, 780000, 1240000, 10200000, 420000, 1220, false, false, fontColor: palette.Muted));
+            }
+
+            AddComparisonMatrix(shapeTree, BuildComparisonRows(slide), 780000, 1660000, 10180000, 3720000, palette);
+            var conclusion = BuildComparisonConclusion(slide);
+            shapeTree.Append(CreateRoundedRectShape(78, "Conclusion Band", 780000, 5630000, 10180000, 520000, palette.DarkPanel, "", 8000));
+            shapeTree.Append(CreateTextShape(79, "Conclusion", conclusion, 1120000, 5760000, 9400000, 260000, 1220, true, false, fontColor: "FFFFFF"));
             shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
             shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
         }
@@ -832,6 +855,116 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 new A.Blip { Embed = relationshipId },
                 new A.Stretch(new A.FillRectangle())),
             shapeProps);
+    }
+
+    private static void AddComparisonMatrix(P.ShapeTree tree, IReadOnlyList<ComparisonRow> rows, long x, long y, long cx, long cy, ThemePalette p)
+    {
+        var colWidths = new[] { 1900000L, 2500000L, 2750000L, cx - 1900000L - 2500000L - 2750000L };
+        var headers = new[] { "\u7EF4\u5EA6", "\u8BD5\u7528\u7248", "\u6807\u51C6\u7248", "\u4E1A\u52A1\u4EF7\u503C" };
+        var headerH = 560000L;
+        var rowGap = 70000L;
+        var rowH = (cy - headerH - rowGap * rows.Count) / Math.Max(1, rows.Count);
+
+        tree.Append(CreateRoundedRectShape(20, "Comparison Table Shell", x - 70000, y - 70000, cx + 140000, cy + 140000, "FFFFFF", p.Line, 9000));
+        var cursorX = x;
+        for (var i = 0; i < headers.Length; i++)
+        {
+            var fill = i == 0 ? p.DarkPanel : i == 1 ? p.SoftSecondary : i == 2 ? p.SoftAccent : p.SoftWarm;
+            var textColor = i == 0 ? "FFFFFF" : p.Title;
+            tree.Append(CreateRectShape((uint)(21 + i), $"Comparison Header {i}", cursorX, y, colWidths[i], headerH, fill));
+            tree.Append(CreateTextShape((uint)(25 + i), $"Comparison Header Text {i}", headers[i], cursorX + 180000, y + 155000, colWidths[i] - 360000, 260000, 1180, true, false, fontColor: textColor));
+            cursorX += colWidths[i];
+        }
+
+        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+        {
+            var row = rows[rowIndex];
+            var rowY = y + headerH + rowGap + rowIndex * (rowH + rowGap);
+            var fill = rowIndex % 2 == 0 ? "FFFFFF" : p.Card;
+            var accent = rowIndex % 3 == 0 ? p.Accent : rowIndex % 3 == 1 ? p.Secondary : p.Warm;
+            tree.Append(CreateRoundedRectShape((uint)(35 + rowIndex * 8), $"Comparison Row {rowIndex}", x, rowY, cx, rowH, fill, p.Line, 5000));
+            tree.Append(CreateRectShape((uint)(36 + rowIndex * 8), $"Comparison Row Accent {rowIndex}", x, rowY, 70000, rowH, accent));
+
+            cursorX = x;
+            var values = new[] { row.Dimension, row.Trial, row.Standard, row.Value };
+            for (var col = 0; col < values.Length; col++)
+            {
+                if (col > 0)
+                {
+                    tree.Append(CreateRectShape((uint)(37 + rowIndex * 8 + col), $"Comparison Divider {rowIndex}-{col}", cursorX, rowY + 120000, 18000, rowH - 240000, p.Line));
+                }
+
+                var text = col == 0 ? values[col] : "\u2713 " + values[col];
+                var fontSize = col == 0 ? 1180 : 1060;
+                var fontColor = col == 0 ? p.Title : p.Body;
+                tree.Append(CreateTextShape((uint)(140 + rowIndex * 10 + col), $"Comparison Text {rowIndex}-{col}", text, cursorX + 170000, rowY + 150000, colWidths[col] - 320000, rowH - 260000, fontSize, col == 0, false, fontColor: fontColor));
+                cursorX += colWidths[col];
+            }
+        }
+    }
+
+    private static IReadOnlyList<ComparisonRow> BuildComparisonRows(SlideDraft slide)
+    {
+        var contentRows = slide.Items
+            .Select(CleanDisplayFragment)
+            .Where(x => !string.IsNullOrWhiteSpace(x) && !LooksLikeDesignInstruction(x))
+            .Take(4)
+            .ToList();
+
+        if (contentRows.Count >= 3)
+        {
+            return contentRows.Select((item, index) =>
+            {
+                var parts = Regex.Split(item, @"[\|\uFF5C;/\uFF1B]+")
+                    .Select(CleanDisplayFragment)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .ToArray();
+                if (parts.Length >= 4)
+                {
+                    return new ComparisonRow(ClampCardText(parts[0], 16), ClampCardText(parts[1], 34), ClampCardText(parts[2], 34), ClampCardText(parts[3], 34));
+                }
+
+                var label = ExtractLeadingLabel(item);
+                return new ComparisonRow(
+                    string.IsNullOrWhiteSpace(label) ? $"\u7EF4\u5EA6 {index + 1}" : ClampCardText(label, 16),
+                    "\u652F\u6301\u57FA\u7840\u9A8C\u8BC1",
+                    "\u652F\u6301\u5B8C\u6574\u843D\u5730",
+                    ClampCardText(item, 34));
+            }).ToList();
+        }
+
+        return new[]
+        {
+            new ComparisonRow("\u6838\u5FC3\u80FD\u529B", "\u8986\u76D6\u57FA\u7840\u9884\u8BA2\u4E0E\u67E5\u770B", "\u8986\u76D6\u9884\u8BA2\u3001\u7BA1\u7406\u3001\u7B7E\u5230\u3001\u901A\u77E5", "\u5173\u952E\u6D41\u7A0B\u5B8C\u6574\u95ED\u73AF"),
+            new ComparisonRow("\u89C4\u5219\u7BA1\u7406", "\u6EE1\u8DB3\u8F7B\u91CF\u8BD5\u7528\u548C\u6D41\u7A0B\u9A8C\u8BC1", "\u652F\u6301\u89C4\u5219\u914D\u7F6E\u548C\u7EDF\u4E00\u7BA1\u63A7", "\u51CF\u5C11\u4EBA\u5DE5\u534F\u8C03\u548C\u6267\u884C\u504F\u5DEE"),
+            new ComparisonRow("\u6570\u636E\u6C89\u6DC0", "\u770B\u5230\u57FA\u7840\u4F7F\u7528\u7ED3\u679C", "\u6C89\u6DC0\u5229\u7528\u7387\u3001\u51B2\u7A81\u3001\u5C65\u7EA6\u6570\u636E", "\u652F\u6491\u8D44\u6E90\u4F18\u5316\u51B3\u7B56"),
+            new ComparisonRow("\u4F53\u9A8C\u4E00\u81F4", "\u9A8C\u8BC1\u5355\u4E00\u5165\u53E3\u4F53\u9A8C", "\u652F\u6301\u591A\u89D2\u8272\u3001\u591A\u573A\u666F\u4E00\u81F4\u4F53\u9A8C", "\u63D0\u5347\u7EC4\u7EC7\u534F\u540C\u6548\u7387")
+        };
+    }
+
+    private static string BuildComparisonConclusion(SlideDraft slide)
+    {
+        var title = slide.Title + " " + slide.Subtitle;
+        if (title.Contains("\u8BD5\u7528", StringComparison.Ordinal) && title.Contains("\u6807\u51C6", StringComparison.Ordinal))
+        {
+            return "\u7ED3\u8BBA\uFF1A\u8BD5\u7528\u7248\u7528\u4E8E\u9A8C\u8BC1\u5173\u952E\u6D41\u7A0B\uFF0C\u6807\u51C6\u7248\u627F\u63A5\u89C4\u6A21\u5316\u8FD0\u8425\uFF0C\u5C06\u4F1A\u8BAE\u5BA4\u7BA1\u7406\u53D8\u6210\u53EF\u8FFD\u8E2A\u3001\u53EF\u4F18\u5316\u7684\u6548\u7387\u8D44\u4EA7\u3002";
+        }
+
+        return "\u7ED3\u8BBA\uFF1A\u5BF9\u6BD4\u4E0D\u662F\u5806\u529F\u80FD\uFF0C\u800C\u662F\u660E\u786E\u54EA\u4E9B\u80FD\u529B\u652F\u6491\u5F53\u524D\u9A8C\u8BC1\uFF0C\u54EA\u4E9B\u80FD\u529B\u652F\u6491\u540E\u7EED\u89C4\u6A21\u5316\u7BA1\u7406\u3002";
+    }
+
+    private static string ExtractLeadingLabel(string text)
+    {
+        var cleaned = CleanDisplayFragment(text);
+        var colon = cleaned.IndexOfAny(new[] { ':', '\uFF1A' });
+        if (colon > 0 && colon <= 12)
+        {
+            return cleaned[..colon].Trim();
+        }
+
+        var separators = new[] { '\uFF0C', ',', '\u3001', ' ', '\u2014', '-' };
+        var split = cleaned.Split(separators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return split.Length > 0 ? split[0] : cleaned;
     }
 
     private static void AddInsightGrid(P.ShapeTree tree, IReadOnlyList<string> items, long x, long y, long cx, long cy, ThemePalette p, uint baseId, int slideIndex)
@@ -1224,7 +1357,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
     {
         var items = slide.Items
             .Select(CleanDisplayFragment)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Where(x => !string.IsNullOrWhiteSpace(x) && !LooksLikeDesignInstruction(x))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Take(maxItems)
             .ToList();
@@ -1312,15 +1445,34 @@ public sealed partial class OfficeExportService : IOfficeExportService
 
         var designWords = new[]
         {
-            "\u8BBE\u8BA1", "\u4F7F\u7528", "\u91C7\u7528", "\u56FE\u6807", "\u914D\u8272",
+            "\u8BBE\u8BA1", "\u91C7\u7528", "\u56FE\u6807", "\u914D\u8272", "\u989C\u8272",
             "\u80CC\u666F", "\u6784\u56FE", "\u7559\u767D", "\u5361\u7247", "\u6A21\u5757",
-            "\u89C6\u89C9", "\u63D2\u753B", "\u573A\u666F", "\u52A8\u7EBF", "\u4E3B\u89C6\u89C9"
+            "\u89C6\u89C9", "\u63D2\u753B", "\u573A\u666F", "\u52A8\u7EBF", "\u4E3B\u89C6\u89C9",
+            "\u53F3\u4FA7", "\u5DE6\u4FA7", "\u5BF9\u6BD4\u8868", "\u7ED3\u8BBA\u5361\u7247",
+            "\u7EFF\u8272", "\u6A59\u8272", "\u52FE\u9009", "\u7A81\u51FA"
         };
         var hits = designWords.Count(value.Contains);
-        return hits >= 2
-            || value.StartsWith("\u4F7F\u7528", StringComparison.Ordinal)
+        var instructionStart = value.StartsWith("\u4F7F\u7528", StringComparison.Ordinal)
             || value.StartsWith("\u91C7\u7528", StringComparison.Ordinal)
-            || value.StartsWith("\u4EE5", StringComparison.Ordinal) && hits > 0;
+            || value.StartsWith("\u4EE5", StringComparison.Ordinal)
+            || value.StartsWith("\u53F3\u4FA7", StringComparison.Ordinal)
+            || value.StartsWith("\u5DE6\u4FA7", StringComparison.Ordinal)
+            || value.StartsWith("\u5BF9\u6BD4\u8868", StringComparison.Ordinal);
+        return hits >= 2
+            || instructionStart && hits >= 1;
+    }
+
+    private static bool IsComparisonSlide(SlideDraft slide)
+    {
+        var value = $"{slide.Layout} {slide.Title} {slide.Subtitle}";
+        return value.Contains("compare", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("comparison", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("\u5BF9\u6BD4", StringComparison.Ordinal)
+            || value.Contains("\u6BD4\u8F83", StringComparison.Ordinal)
+            || value.Contains("\u7248\u672C", StringComparison.Ordinal)
+            || value.Contains("\u8BD5\u7528\u7248", StringComparison.Ordinal)
+            || value.Contains("\u6807\u51C6\u7248", StringComparison.Ordinal)
+            || value.Contains("\u5DEE\u5F02", StringComparison.Ordinal);
     }
 
     private static string ClampCardText(string text, int maxLength)
@@ -1357,7 +1509,8 @@ public sealed partial class OfficeExportService : IOfficeExportService
         if (value.Contains("data")) return "data-card";
         if (value.Contains("process")) return "process";
         if (value.Contains("timeline")) return "timeline";
-        if (value.Contains("two-column") || value.Contains("compare")) return "two-column";
+        if (value.Contains("compare") || value.Contains("comparison") || value.Contains("\u5BF9\u6BD4") || value.Contains("\u6BD4\u8F83") || value.Contains("\u7248\u672C")) return "comparison";
+        if (value.Contains("two-column")) return "two-column";
         return "title-content";
     }
 
@@ -1453,5 +1606,6 @@ public sealed partial class OfficeExportService : IOfficeExportService
     }
 
     private sealed record MarkdownBlock(string Text, int Level, bool IsBullet);
+    private sealed record ComparisonRow(string Dimension, string Trial, string Standard, string Value);
     private sealed record SlideDraft(string Title, string Subtitle, IReadOnlyList<string> Items, string Layout, string Visual, string Notes, string Theme, bool IsCover, string? ImageUrl = null);
 }
