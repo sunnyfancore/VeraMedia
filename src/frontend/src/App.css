@@ -1395,6 +1395,24 @@ button {
   grid-template-columns: 48px minmax(0, 1fr);
   gap: 6px;
 }
+
+.ppt-dialogue-role-voices {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid #eef2f7;
+  padding-top: 6px;
+}
+
+.ppt-dialogue-role-voices label {
+  grid-template-columns: minmax(48px, 72px) minmax(0, 1fr);
+}
+
+.ppt-dialogue-role-voices span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 @keyframes ppt-voice-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }

@@ -301,7 +301,15 @@ const createPptDialogueDraft = (notes: string) => {
     .join('\n')
 }
 
-const getPptDialogueVoiceForSpeaker = (speaker: string, index: number, settings: PptVideoSettings) => {
+const getPptDialogueVoiceForSpeaker = (
+  speaker: string,
+  index: number,
+  settings: PptVideoSettings,
+  roleVoices: Record<string, string> = {},
+) => {
+  const directVoice = roleVoices[speaker] || roleVoices[normalizePptDialogueSpeaker(speaker)]
+  if (directVoice) return directVoice
+
   const normalized = normalizePptDialogueSpeaker(speaker).toLowerCase()
   if (normalized.includes('\u65c1\u767d') || normalized.includes('narrator')) return settings.dialogueNarratorVoice
   if (normalized.includes('\u4e3b\u6301') || normalized.includes('\u4e3b\u8bb2') || normalized.includes('host')) return settings.dialogueHostVoice
@@ -309,7 +317,11 @@ const getPptDialogueVoiceForSpeaker = (speaker: string, index: number, settings:
   return index % 2 === 0 ? settings.dialogueHostVoice : settings.dialogueGuestVoice
 }
 
-const buildPptVideoDialogueVoices = (slides: PptVideoSlide[], settings: PptVideoSettings) => {
+const buildPptVideoDialogueVoices = (
+  slides: PptVideoSlide[],
+  settings: PptVideoSettings,
+  roleVoices: Record<string, string> = {},
+) => {
   const voices: Record<string, string> = {
     ['\u4e3b\u6301\u4eba']: settings.dialogueHostVoice,
     ['\u4e3b\u8bb2\u4eba']: settings.dialogueHostVoice,
@@ -323,7 +335,7 @@ const buildPptVideoDialogueVoices = (slides: PptVideoSlide[], settings: PptVideo
   }
 
   detectPptDialogueSpeakers(slides).forEach((speaker, index) => {
-    voices[speaker] = getPptDialogueVoiceForSpeaker(speaker, index, settings)
+    voices[speaker] = getPptDialogueVoiceForSpeaker(speaker, index, settings, roleVoices)
   })
   return voices
 }
@@ -647,6 +659,7 @@ function App() {
     resolution: '720p',
     secondsPerSlide: '5',
   })
+  const [pptVideoRoleVoices, setPptVideoRoleVoices] = useState<Record<string, string>>({})
   const pptVideoProgressDetail = getPptVideoProgressDetail(pptVideoPhase, pptVideoStatus)
   const pptVideoProgressInlineDetail = /^\([^)]*\)$/.test(pptVideoProgressDetail) ? pptVideoProgressDetail : ''
   const pptVideoProgressMessage = pptVideoProgressInlineDetail
@@ -654,6 +667,26 @@ function App() {
     : pptVideoProgressDetail || (!pptVideoPhase && !pptVideoStatus ? '就绪，等待操作...' : '')
   const pptVideoProgressTitle = `${pptVideoPhase || '处理进度'}${pptVideoProgressInlineDetail ? ` ${pptVideoProgressInlineDetail}` : ''}`
   const pptVideoDialogueSpeakers = detectPptDialogueSpeakers(pptVideoSlides)
+  const pptVideoDialogueSpeakerKey = pptVideoDialogueSpeakers.join('\u0001')
+  const pptVideoDialogueVoiceEntries = pptVideoDialogueSpeakers.map((speaker, index) => ({
+    speaker,
+    voice: getPptDialogueVoiceForSpeaker(speaker, index, pptVideoSettings, pptVideoRoleVoices),
+  }))
+  useEffect(() => {
+    setPptVideoRoleVoices((current) => {
+      const active = new Set(pptVideoDialogueSpeakers)
+      let changed = false
+      const next: Record<string, string> = {}
+      for (const [speaker, voice] of Object.entries(current)) {
+        if (!active.has(speaker)) {
+          changed = true
+          continue
+        }
+        next[speaker] = voice
+      }
+      return changed ? next : current
+    })
+  }, [pptVideoDialogueSpeakerKey])
   const [articleVersions, setArticleVersions] = useState<ArticleVersion[] | null>(null)
   const [articleVersionTitle, setArticleVersionTitle] = useState('')
   const [articleVersionProjectId, setArticleVersionProjectId] = useState<number | null>(null)
@@ -2807,6 +2840,7 @@ function App() {
 
     setPptVideoFile(file)
     setPptVideoSlides([])
+    setPptVideoRoleVoices({})
     setPptVideoPreviewId(null)
     setPptVideoEncoder(null)
     setPptVideoPreviewBusy(true)
@@ -2904,6 +2938,10 @@ function App() {
 
   const updatePptVideoSetting = <K extends keyof PptVideoSettings>(key: K, value: PptVideoSettings[K]) => {
     setPptVideoSettings((current) => ({ ...current, [key]: value }))
+  }
+
+  const updatePptVideoRoleVoice = (speaker: string, voice: string) => {
+    setPptVideoRoleVoices((current) => ({ ...current, [speaker]: voice }))
   }
 
   const convertPptVideoSlideToDialogue = (index: number) => {
@@ -3020,7 +3058,7 @@ function App() {
       form.append('volume', String(pptVideoSettings.volume))
       form.append('dubbingMode', pptVideoSettings.dubbingMode)
       if (pptVideoSettings.dubbingMode === 'dialogue') {
-        form.append('dialogueVoicesJson', JSON.stringify(buildPptVideoDialogueVoices(pptVideoSlides, pptVideoSettings)))
+        form.append('dialogueVoicesJson', JSON.stringify(buildPptVideoDialogueVoices(pptVideoSlides, pptVideoSettings, pptVideoRoleVoices)))
       }
       form.append('notesJson', JSON.stringify(Object.fromEntries(pptVideoSlides.map((slide) => [slide.index, slide.notes]))))
       if (pptVideoPreviewId) form.append('previewId', pptVideoPreviewId)
@@ -4711,6 +4749,18 @@ function App() {
                           {pptVideoVoiceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
                         </select>
                       </label>
+                      {pptVideoDialogueVoiceEntries.length > 0 && (
+                        <div className="ppt-dialogue-role-voices">
+                          {pptVideoDialogueVoiceEntries.map((entry) => (
+                            <label key={entry.speaker} title={entry.speaker}>
+                              <span>{entry.speaker}</span>
+                              <select value={entry.voice} onChange={(event) => updatePptVideoRoleVoice(entry.speaker, event.target.value)}>
+                                {pptVideoVoiceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                              </select>
+                            </label>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                   <label>
