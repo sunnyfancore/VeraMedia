@@ -334,6 +334,7 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
                 builder.AppendLine();
                 builder.AppendLine("## 内容质量");
                 builder.AppendLine("- 每页只表达一个核心判断。标题要有观点和气势，不要写成目录项；bullets 写结论、数据、行动项或关键证据，不写描述性长句。");
+                builder.AppendLine("- bullets 是页面可见正文，每页必须给 2-5 条，不能留空；visual 只作为渲染 brief，不要把需要展示的正文放进 visual。");
                 builder.AppendLine("- 高端感来自取舍：减少废话，突出关键数字、矛盾、机会、路径和结果。不要泛泛发挥，也不要把资料简单搬运。");
                 builder.AppendLine("- visual 字段必须像设计 brief：说明画面主体、构图、色彩、层级、图形模块、留白和情绪，而不只是'流程图'或'配图'。");
                 builder.AppendLine("- imageUrl 字段：如果用户在对话中上传了图片或之前生成了图片，请将对应的图片 URL 填入相关页面的 imageUrl 字段。系统将自动下载并嵌入到幻灯片中，实现图文结合效果。");

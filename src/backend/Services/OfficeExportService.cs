@@ -423,7 +423,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
             shapeTree.Append(CreateRectShape(2, "Background", 0, 0, 12192000, 6858000, palette.LightBackground));
             shapeTree.Append(CreateGradientRectShape(3, "Top Bar", 0, 0, 12192000, 220000, palette.Accent, palette.Secondary, 0));
             shapeTree.Append(CreateTextShape(5, "Title", slide.Title, 760000, 510000, 10300000, 760000, 2520, true, false, fontColor: palette.Title));
-            var items = slide.Items.Take(6).ToList();
+            var items = BuildDisplayItems(slide, 6);
             for (var i = 0; i < items.Count; i++)
             {
                 var y = 1580000L + i * 690000L;
@@ -460,7 +460,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
             shapeTree.Append(CreateGradientRectShape(3, "Top Bar", 0, 0, 12192000, 220000, palette.Accent, palette.Secondary, 0));
             AddSlideDecorations(shapeTree, palette, index, 95, false);
             shapeTree.Append(CreateTextShape(5, "Title", slide.Title, 760000, 510000, 10300000, 760000, 2520, true, false, fontColor: palette.Title));
-            var metrics = slide.Items.Take(4).ToList();
+            var metrics = BuildDisplayItems(slide, 4);
             var colCount = Math.Min(metrics.Count, 4);
             var cardW = colCount <= 2 ? 4800000L : 2500000L;
             var gap = colCount <= 2 ? 400000L : 200000L;
@@ -491,7 +491,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
             shapeTree.Append(CreateGradientRectShape(3, "Top Bar", 0, 0, 12192000, 220000, palette.Accent, palette.Secondary, 0));
             AddSlideDecorations(shapeTree, palette, index, 95, false);
             shapeTree.Append(CreateTextShape(5, "Title", slide.Title, 760000, 510000, 10300000, 760000, 2520, true, false, fontColor: palette.Title));
-            var summaryItems = slide.Items.Take(6).ToList();
+            var summaryItems = BuildDisplayItems(slide, 6);
             for (var i = 0; i < summaryItems.Count; i++)
             {
                 var col = i % 3;
@@ -518,7 +518,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 shapeTree.Append(CreateTextShape(6, "Subtitle", slide.Subtitle, 780000, 1240000, 10200000, 420000, 1220, false, false, fontColor: palette.Muted));
             }
 
-            var items = slide.Items.Take(6).ToList();
+            var items = BuildDisplayItems(slide, 6);
             var left = string.Join("\n", items.Take((items.Count + 1) / 2));
             var right = string.Join("\n", items.Skip((items.Count + 1) / 2));
             var y = string.IsNullOrWhiteSpace(slide.Subtitle) ? 1700000 : 1900000;
@@ -552,7 +552,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 shapeTree.Append(CreateTextShape(6, "Subtitle", slide.Subtitle, 780000, 1240000, 10200000, 420000, 1220, false, false, fontColor: palette.Muted));
             }
 
-            var steps = slide.Items.Take(5).ToList();
+            var steps = BuildDisplayItems(slide, 5);
             var startX = 850000L;
             var stepY = 2840000L;
             var stepGap = 2100000L;
@@ -592,7 +592,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 shapeTree.Append(CreateTextShape(6, "Subtitle", slide.Subtitle, 780000, 1240000, 10200000, 420000, 1220, false, false, fontColor: "CBD5E1"));
             }
 
-            var cards = slide.Items.Take(4).ToList();
+            var cards = BuildDisplayItems(slide, 4);
             for (var i = 0; i < cards.Count; i++)
             {
                 var x = 800000L + (i % 2) * 5400000L;
@@ -619,39 +619,26 @@ public sealed partial class OfficeExportService : IOfficeExportService
             }
 
             var bodyY = string.IsNullOrWhiteSpace(slide.Subtitle) ? 1580000 : 1760000;
+            var bodyItems = BuildDisplayItems(slide, 6);
+            var bodyText = string.Join("\n", bodyItems);
+            var visualSignals = ExtractVisualFragments(slide.Visual, 4);
+            var hasAuthoredItems = slide.Items.Any(x => !string.IsNullOrWhiteSpace(x));
 
             if (imageRelId != null)
             {
                 shapeTree.Append(CreateRoundedRectShape(7, "Content Card", 720000, bodyY - 110000, 5900000, 4350000, "FFFFFF", palette.Line));
-                shapeTree.Append(CreateTextShape(8, "Body", string.Join("\n", slide.Items.Take(6)), 1020000, bodyY + 220000, 5300000, 3720000, 1520, false, true, fontColor: palette.Body));
+                shapeTree.Append(CreateTextShape(8, "Body", bodyText, 1020000, bodyY + 220000, 5300000, 3720000, 1520, false, true, fontColor: palette.Body));
                 shapeTree.Append(CreatePictureShape(16, "Content Image", 6900000, bodyY - 110000, 4540000, 4350000, imageRelId, 10000));
+            }
+            else if (hasAuthoredItems && visualSignals.Count > 0)
+            {
+                shapeTree.Append(CreateRoundedRectShape(7, "Content Card", 720000, bodyY - 110000, 6800000, 4350000, "FFFFFF", palette.Line));
+                shapeTree.Append(CreateTextShape(8, "Body", bodyText, 1020000, bodyY + 220000, 6100000, 3720000, 1480, false, true, fontColor: palette.Body));
+                AddSignalPanel(shapeTree, visualSignals, 7900000, bodyY - 110000, 3500000, 4350000, palette, 30, index);
             }
             else
             {
-                shapeTree.Append(CreateRoundedRectShape(7, "Content Card", 720000, bodyY - 110000, 7750000, 4350000, "FFFFFF", palette.Line));
-                shapeTree.Append(CreateTextShape(8, "Body", string.Join("\n", slide.Items.Take(6)), 1020000, bodyY + 220000, 7060000, 3720000, 1520, false, true, fontColor: palette.Body));
-                var visualText = string.Join("\n", new[] { slide.Visual }.Where(x => !string.IsNullOrWhiteSpace(x)));
-                if (!string.IsNullOrWhiteSpace(visualText))
-                {
-                    shapeTree.Append(CreateRoundedRectShape(9, "Visual Card", 8780000, bodyY - 110000, 2660000, 4350000, palette.SoftSecondary, palette.SecondaryLine));
-                    shapeTree.Append(CreateTextShape(10, "Visual Label", "VISUAL", 9070000, bodyY + 170000, 2100000, 310000, 1100, true, false, fontColor: palette.SecondaryText));
-                    shapeTree.Append(CreateTextShape(11, "Visual Direction", visualText, 9070000, bodyY + 620000, 2100000, 3150000, 1120, false, false, fontColor: palette.Body));
-                }
-                else
-                {
-                    var sideAccent = index % 3 == 0 ? palette.Accent : index % 3 == 1 ? palette.Secondary : palette.Warm;
-                    var sideCards = new[]
-                    {
-                        (palette.Card, palette.SoftAccent, "KEY POINT", sideAccent),
-                        (palette.SoftSecondary, palette.SecondaryLine, "INSIGHT", palette.SecondaryText),
-                        (palette.SoftWarm, palette.Warm, "HIGHLIGHT", palette.Warm),
-                    };
-                    var pick = sideCards[index % sideCards.Length];
-                    shapeTree.Append(CreateRoundedRectShape(9, "Side Card", 8780000, bodyY - 110000, 2660000, 4350000, pick.Item1, pick.Item2));
-                    shapeTree.Append(CreateTextShape(10, "Side Label", pick.Item3, 9070000, bodyY + 170000, 2100000, 310000, 1100, true, false, fontColor: pick.Item4));
-                    var sideText = slide.Items.Count > 2 ? slide.Items[0] : "Use concise bullets, charts, flows, or scenario visuals to support this page.";
-                    shapeTree.Append(CreateTextShape(11, "Side Copy", sideText, 9070000, bodyY + 620000, 2100000, 2200000, 1120, false, false, fontColor: palette.Body));
-                }
+                AddInsightGrid(shapeTree, bodyItems, 720000, bodyY - 110000, 10600000, 4350000, palette, 20, index);
             }
 
             shapeTree.Append(CreateTextShape(12, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
@@ -670,17 +657,18 @@ public sealed partial class OfficeExportService : IOfficeExportService
             }
 
             var bodyY = string.IsNullOrWhiteSpace(slide.Subtitle) ? 1580000 : 1760000;
+            var bodyItems = BuildDisplayItems(slide, 6);
+            var bodyText = string.Join("\n", bodyItems);
 
             if (imageRelId != null)
             {
                 shapeTree.Append(CreateRoundedRectShape(7, "Content Card", 720000, bodyY - 110000, 5900000, 4350000, "FFFFFF", palette.Line));
-                shapeTree.Append(CreateTextShape(8, "Body", string.Join("\n", slide.Items.Take(6)), 1020000, bodyY + 220000, 5300000, 3720000, 1520, false, true, fontColor: palette.Body));
+                shapeTree.Append(CreateTextShape(8, "Body", bodyText, 1020000, bodyY + 220000, 5300000, 3720000, 1520, false, true, fontColor: palette.Body));
                 shapeTree.Append(CreatePictureShape(16, "Content Image", 6900000, bodyY - 110000, 4540000, 4350000, imageRelId, 10000));
             }
             else
             {
-                shapeTree.Append(CreateRoundedRectShape(7, "Content Card", 720000, bodyY - 110000, 10600000, 4350000, "FFFFFF", palette.Line));
-                shapeTree.Append(CreateTextShape(8, "Body", string.Join("\n", slide.Items.Take(6)), 1020000, bodyY + 220000, 9900000, 3720000, 1520, false, true, fontColor: palette.Body));
+                AddInsightGrid(shapeTree, bodyItems, 720000, bodyY - 110000, 10600000, 4350000, palette, 20, index);
             }
 
             shapeTree.Append(CreateTextShape(12, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
@@ -844,6 +832,88 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 new A.Blip { Embed = relationshipId },
                 new A.Stretch(new A.FillRectangle())),
             shapeProps);
+    }
+
+    private static void AddInsightGrid(P.ShapeTree tree, IReadOnlyList<string> items, long x, long y, long cx, long cy, ThemePalette p, uint baseId, int slideIndex)
+    {
+        var list = items
+            .Select(x => ClampCardText(x, 64))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(6)
+            .ToList();
+        if (list.Count == 0) return;
+
+        var layoutX = x;
+        var layoutY = y;
+        var layoutCx = cx;
+        var layoutCy = cy;
+        if (list.Count == 1)
+        {
+            layoutX += 900000;
+            layoutY += 700000;
+            layoutCx -= 1800000;
+            layoutCy -= 1400000;
+        }
+
+        var columns = list.Count <= 2 ? list.Count : list.Count <= 4 ? 2 : 3;
+        var rows = (int)Math.Ceiling(list.Count / (double)columns);
+        var gap = 180000L;
+        var cardCx = (layoutCx - gap * (columns - 1)) / columns;
+        var cardCy = (layoutCy - gap * (rows - 1)) / rows;
+        var fills = new[] { "FFFFFF", p.Card, p.SoftSecondary, p.SoftWarm };
+        var accents = new[] { p.Accent, p.Secondary, p.Warm };
+
+        for (var i = 0; i < list.Count; i++)
+        {
+            var col = i % columns;
+            var row = i / columns;
+            var cardX = layoutX + col * (cardCx + gap);
+            var cardY = layoutY + row * (cardCy + gap);
+            var accent = accents[(slideIndex + i) % accents.Length];
+            var fill = fills[(slideIndex + i) % fills.Length];
+            var id = baseId + (uint)(i * 5);
+
+            tree.Append(CreateRoundedRectShape(id, $"Insight Card {i}", cardX, cardY, cardCx, cardCy, fill, p.Line, 9000));
+            tree.Append(CreateRectShape(id + 1, $"Insight Accent {i}", cardX + 120000, cardY, cardCx - 240000, 70000, accent));
+            tree.Append(CreateTextShape(id + 2, $"Insight No {i}", $"{i + 1:00}", cardX + 240000, cardY + 250000, 440000, 320000, 1150, true, false, fontColor: accent));
+            var compact = list[i].Length <= 10 && !list[i].Contains(' ');
+            var textX = compact ? cardX + 560000 : cardX + 780000;
+            var textY = compact ? cardY + Math.Max(520000, cardCy / 2 - 270000) : cardY + 220000;
+            var textCx = compact ? Math.Max(900000, cardCx - 1120000) : Math.Max(900000, cardCx - 1040000);
+            var textCy = compact ? 620000 : Math.Max(520000, cardCy - 420000);
+            var textSize = compact ? cardCy < 1200000 ? 1500 : 2100 : cardCy < 1200000 ? 1080 : 1260;
+            tree.Append(CreateTextShape(id + 3, $"Insight Text {i}", list[i], textX, textY, textCx, textCy, textSize, true, false, fontColor: p.Body));
+        }
+    }
+
+    private static void AddSignalPanel(P.ShapeTree tree, IReadOnlyList<string> items, long x, long y, long cx, long cy, ThemePalette p, uint baseId, int slideIndex)
+    {
+        var list = items
+            .Select(x => ClampCardText(x, 46))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(4)
+            .ToList();
+        if (list.Count == 0) return;
+
+        tree.Append(CreateRoundedRectShape(baseId, "Signal Panel", x, y, cx, cy, p.SoftSecondary, p.SecondaryLine, 10000));
+        var gap = 160000L;
+        var innerX = x + 260000;
+        var innerCx = cx - 520000;
+        var cardCy = (cy - 620000 - gap * (list.Count - 1)) / list.Count;
+        var startY = y + 310000;
+        var accents = new[] { p.Secondary, p.Accent, p.Warm };
+
+        for (var i = 0; i < list.Count; i++)
+        {
+            var cardY = startY + i * (cardCy + gap);
+            var id = baseId + 5 + (uint)(i * 4);
+            var accent = accents[(slideIndex + i) % accents.Length];
+            tree.Append(CreateRoundedRectShape(id, $"Signal Card {i}", innerX, cardY, innerCx, cardCy, i % 2 == 0 ? "FFFFFF" : p.Card, p.SecondaryLine, 7000));
+            tree.Append(CreateRectShape(id + 1, $"Signal Accent {i}", innerX, cardY, 70000, cardCy, accent));
+            tree.Append(CreateTextShape(id + 2, $"Signal Text {i}", list[i], innerX + 240000, cardY + 190000, innerCx - 430000, Math.Max(420000, cardCy - 300000), 1080, true, false, fontColor: p.Body));
+        }
     }
 
     private static void AddSlideDecorations(P.ShapeTree tree, ThemePalette p, int slideIndex, uint baseId, bool darkMode)
@@ -1148,6 +1218,115 @@ public sealed partial class OfficeExportService : IOfficeExportService
     {
         var cleaned = Regex.Replace(text, @"[*_`>#\[\]\(\)]", "").Trim();
         return PrefixRegex().Replace(cleaned, "").Trim();
+    }
+
+    private static List<string> BuildDisplayItems(SlideDraft slide, int maxItems)
+    {
+        var items = slide.Items
+            .Select(CleanDisplayFragment)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(maxItems)
+            .ToList();
+
+        if (items.Count == 0)
+        {
+            items.AddRange(ExtractVisualFragments(slide.Visual, maxItems));
+        }
+
+        if (items.Count == 0 && !string.IsNullOrWhiteSpace(slide.Subtitle))
+        {
+            items.Add(ClampCardText(slide.Subtitle, 72));
+        }
+
+        if (items.Count == 0)
+        {
+            items.Add(ClampCardText(slide.Title, 72));
+        }
+
+        return items
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(maxItems)
+            .ToList();
+    }
+
+    private static List<string> ExtractVisualFragments(string text, int maxItems)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrWhiteSpace(text)) return result;
+
+        foreach (var rawClause in Regex.Split(text.ReplaceLineEndings("\n"), @"[\r\n;\uFF1B\u3002]+"))
+        {
+            var clause = CleanDisplayFragment(rawClause);
+            if (string.IsNullOrWhiteSpace(clause)) continue;
+
+            var colon = clause.IndexOfAny(new[] { ':', '\uFF1A' });
+            if (colon >= 0 && colon < 24)
+            {
+                clause = clause[(colon + 1)..].Trim();
+            }
+
+            foreach (var rawPiece in Regex.Split(clause, @"[\u3001,\uFF0C/|]+"))
+            {
+                var piece = CleanDisplayFragment(rawPiece);
+                if (piece.Length < 2 || LooksLikeDesignInstruction(piece)) continue;
+                result.Add(ClampCardText(piece, 58));
+                if (result.Count >= maxItems) break;
+            }
+
+            if (result.Count >= maxItems) break;
+        }
+
+        if (result.Count == 0)
+        {
+            foreach (var rawClause in Regex.Split(text.ReplaceLineEndings("\n"), @"[\r\n;\uFF1B\u3002]+"))
+            {
+                var clause = CleanDisplayFragment(rawClause);
+                if (clause.Length < 2 || LooksLikeDesignInstruction(clause)) continue;
+                result.Add(ClampCardText(clause, 72));
+                if (result.Count >= maxItems) break;
+            }
+        }
+
+        return result
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(maxItems)
+            .ToList();
+    }
+
+    private static string CleanDisplayFragment(string text)
+    {
+        var cleaned = CleanInline(text ?? "");
+        cleaned = Regex.Replace(cleaned, @"^(?:[-+*\d\.\s]+|[A-Za-z ]{2,16}\s*[:\uFF1A])", "").Trim();
+        return cleaned.Trim(' ', '-', '_', '.', ':', '\uFF1A', '\uFF1B', '\u3002', '\uFF0C', '\u3001');
+    }
+
+    private static bool LooksLikeDesignInstruction(string text)
+    {
+        var value = text.Trim();
+        if (value.Length == 0) return true;
+        var lower = value.ToLowerInvariant();
+        if (lower.Contains("visual") || lower.Contains("layout") || lower.Contains("placeholder")) return true;
+
+        var designWords = new[]
+        {
+            "\u8BBE\u8BA1", "\u4F7F\u7528", "\u91C7\u7528", "\u56FE\u6807", "\u914D\u8272",
+            "\u80CC\u666F", "\u6784\u56FE", "\u7559\u767D", "\u5361\u7247", "\u6A21\u5757",
+            "\u89C6\u89C9", "\u63D2\u753B", "\u573A\u666F", "\u52A8\u7EBF", "\u4E3B\u89C6\u89C9"
+        };
+        var hits = designWords.Count(value.Contains);
+        return hits >= 2
+            || value.StartsWith("\u4F7F\u7528", StringComparison.Ordinal)
+            || value.StartsWith("\u91C7\u7528", StringComparison.Ordinal)
+            || value.StartsWith("\u4EE5", StringComparison.Ordinal) && hits > 0;
+    }
+
+    private static string ClampCardText(string text, int maxLength)
+    {
+        var cleaned = CleanInline(text ?? "");
+        return cleaned.Length > maxLength ? cleaned[..maxLength].Trim() + "..." : cleaned;
     }
 
     private static string ClampSlideText(string text) => text.Length > 110 ? text[..110] + "..." : text;
