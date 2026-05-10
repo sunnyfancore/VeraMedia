@@ -15,6 +15,7 @@ public sealed class GenerationJobRunner(
     IAiChatClient chatClient,
     IImageGenerationService imageGenerationService,
     IWebPageContentService webPageContentService,
+    IAttachmentContentService attachmentContentService,
     IAppSettingsService appSettingsService) : IGenerationJobRunner
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -56,7 +57,7 @@ public sealed class GenerationJobRunner(
             Conversation = conversation,
             Role = "assistant",
             Content = "",
-            MetadataJson = "{}",
+            MetadataJson = BuildMessageMetadataJson(request),
             CreatedAt = now.AddTicks(1)
         };
         db.ConversationMessages.AddRange(userMessage, assistantMessage);
@@ -69,6 +70,7 @@ public sealed class GenerationJobRunner(
             UserMessageId = userMessage.Id,
             AssistantMessageId = assistantMessage.Id,
             RequestJson = JsonSerializer.Serialize(request, JsonOptions),
+            MessageType = ResolveCapabilityMessageType(request),
             Status = GenerationJobStatuses.Pending,
             CreatedAt = now,
             UpdatedAt = now
@@ -76,6 +78,20 @@ public sealed class GenerationJobRunner(
         db.GenerationJobs.Add(job);
         await db.SaveChangesAsync(cancellationToken);
         return ToDto(job);
+    }
+
+    private static string? ResolveCapabilityMessageType(SendMessageRequest request)
+    {
+        var capability = request.Options?.Capability?.Trim().ToLowerInvariant();
+        return capability is "ppt" ? "ppt" : null;
+    }
+
+    private static string BuildMessageMetadataJson(SendMessageRequest request)
+    {
+        var messageType = ResolveCapabilityMessageType(request);
+        return string.IsNullOrWhiteSpace(messageType)
+            ? "{}"
+            : JsonSerializer.Serialize(new { messageType }, JsonOptions);
     }
 
     public async Task<IReadOnlyList<GenerationJobDto>> ListRunningAsync(long userId, long? conversationId, CancellationToken cancellationToken)
@@ -208,7 +224,8 @@ public sealed class GenerationJobRunner(
             await PersistAsync(job, force: true, cancellationToken);
 
             await AddThinkingAsync(job, request, "已创建或载入会话，开始整理本次任务。", cancellationToken);
-            var enrichedRequest = await TryEnrichRequestWithWebPagesAsync(job, request, cancellationToken);
+            var attachmentEnrichedRequest = await TryEnrichRequestWithAttachmentsAsync(job, request, cancellationToken);
+            var enrichedRequest = await TryEnrichRequestWithWebPagesAsync(job, attachmentEnrichedRequest, cancellationToken);
             if (enrichedRequest is null)
             {
                 await CompleteAsync(job, cancellationToken);
@@ -220,7 +237,7 @@ public sealed class GenerationJobRunner(
             var imageModel = providerResolver.GetEnabledModel(provider, AiModelTypes.Image);
 
             var intent = await intentRouter.RouteAsync(enrichedRequest, provider, chatModel, cancellationToken);
-            await SetModeAsync(job, intent.Type, cancellationToken);
+            await SetModeAsync(job, ResolveCapabilityMessageType(request) ?? intent.Type, cancellationToken);
             await AddThinkingAsync(job, request, $"意图识别：{intent.Type} / {intent.Confidence:0.00} / {intent.Title}", cancellationToken);
             if (intent.Confidence < 0.65)
             {
@@ -371,7 +388,7 @@ public sealed class GenerationJobRunner(
         var title = intent.Title;
         await ReplaceContentAsync(job, $"正在生成图片：{title}\n\n", force: true, cancellationToken);
         GeneratedArticleImage? generated = null;
-        await foreach (var image in imageGenerationService.GenerateFromPromptStreamAsync(provider, imageModel, title, intent.Prompt, cancellationToken))
+        await foreach (var image in imageGenerationService.GenerateFromPromptStreamAsync(provider, imageModel, title, intent.Prompt, originalRequest.Options, cancellationToken))
         {
             generated = image;
             await ReplaceContentAsync(job, BuildDirectImageMessage(image), force: true, cancellationToken);
@@ -433,6 +450,61 @@ public sealed class GenerationJobRunner(
             foreach (var failure in failures)
             {
                 builder.AppendLine($"- {failure.Url}：{failure.Error}");
+            }
+        }
+
+        return request with { Content = builder.ToString() };
+    }
+
+    private async Task<SendMessageRequest> TryEnrichRequestWithAttachmentsAsync(
+        GenerationJob job,
+        SendMessageRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.Attachments is not { Count: > 0 })
+        {
+            return request;
+        }
+
+        await AddThinkingAsync(job, request, $"检测到 {request.Attachments.Count} 个附件，正在提取可读内容。", cancellationToken);
+        var results = await attachmentContentService.ExtractAsync(request.Attachments, cancellationToken);
+        var readable = results.Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
+        var failed = results.Where(x => string.IsNullOrWhiteSpace(x.Text) && !string.IsNullOrWhiteSpace(x.Error)).ToList();
+
+        foreach (var item in readable)
+        {
+            await AddThinkingAsync(job, request, $"已读取附件：{item.FileName}。", cancellationToken);
+        }
+
+        foreach (var item in failed)
+        {
+            await AddThinkingAsync(job, request, $"{item.FileName} 未能展开：{item.Error}", cancellationToken);
+        }
+
+        if (readable.Count == 0)
+        {
+            return request;
+        }
+
+        var builder = new StringBuilder(request.Content);
+        builder.AppendLine();
+        builder.AppendLine();
+        builder.AppendLine("以下是系统已从上传附件中提取到的可读内容，请严格结合这些内容处理用户需求；不要声称读取了未成功解析的文件：");
+        foreach (var item in readable)
+        {
+            builder.AppendLine();
+            builder.AppendLine($"## 附件：{item.FileName}");
+            builder.AppendLine($"类型：{item.ContentType}，大小：{item.Size} bytes，URL：{item.Url}");
+            builder.AppendLine(item.Text);
+        }
+
+        if (failed.Count > 0)
+        {
+            builder.AppendLine();
+            builder.AppendLine("以下附件未能提取正文，只能作为文件名和类型参考：");
+            foreach (var item in failed)
+            {
+                builder.AppendLine($"- {item.FileName}：{item.Error}");
             }
         }
 

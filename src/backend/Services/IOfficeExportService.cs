@@ -5,5 +5,5 @@ public sealed record OfficeExportFile(string FileName, string ContentType, byte[
 public interface IOfficeExportService
 {
     OfficeExportFile CreateDocx(string title, string markdown);
-    OfficeExportFile CreatePptx(string title, string markdown);
+    Task<OfficeExportFile> CreatePptxAsync(string title, string markdown);
 }

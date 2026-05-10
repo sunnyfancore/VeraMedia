@@ -3,7 +3,7 @@ using VeraMedia.Api.Contracts;
 
 namespace VeraMedia.Api.Services;
 
-public sealed record ChatTurn(string Role, string Content);
+public sealed record ChatTurn(string Role, string Content, IReadOnlyList<AttachmentDto>? Attachments = null);
 
 public interface IAiChatClient
 {

@@ -1,11 +1,18 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using VeraMedia.Api.Data;
 using VeraMedia.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.KeepAliveTimeout = TimeSpan.FromMinutes(30);
+    options.Limits.RequestHeadersTimeout = TimeSpan.FromMinutes(5);
+});
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -69,7 +76,12 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("Admin", policy =>
+        policy.RequireAssertion(ctx =>
+            string.Equals(ctx.User.FindFirst("is_admin")?.Value, "true", StringComparison.OrdinalIgnoreCase)));
+});
 builder.Services.AddHttpClient<IAiChatClient, OpenAiCompatibleChatClient>(client =>
 {
     client.Timeout = TimeSpan.FromMinutes(20);
@@ -92,6 +104,14 @@ builder.Services.AddScoped<IConversationIntentRouter, ConversationIntentRouter>(
 builder.Services.AddScoped<IGenerationJobRunner, GenerationJobRunner>();
 builder.Services.AddScoped<IAuditLogger, AuditLogger>();
 builder.Services.AddScoped<IOfficeExportService, OfficeExportService>();
+builder.Services.AddScoped<IAttachmentContentService, AttachmentContentService>();
+builder.Services.AddSingleton<EdgeTtsClient>();
+builder.Services.AddSingleton<IPptVideoTaskManager, PptVideoTaskManager>();
+builder.Services.AddSingleton<IPptVideoPreviewStore, PptVideoPreviewStore>();
+builder.Services.AddSingleton<IPptxThumbnailRenderer, PptxThumbnailRenderer>();
+builder.Services.AddSingleton<ILibreOfficeService, LibreOfficeListenerService>();
+builder.Services.AddHostedService(sp => (LibreOfficeListenerService)sp.GetRequiredService<ILibreOfficeService>());
+builder.Services.AddScoped<IPptVideoConversionService, PptVideoConversionService>();
 builder.Services.AddSingleton<IGenerationJobQueue, GenerationJobQueue>();
 builder.Services.AddHostedService<GenerationJobWorker>();
 builder.Services.AddScoped<IAiProviderResolver, AiProviderResolver>();
@@ -101,6 +121,12 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.Configure<SeedUserOptions>(builder.Configuration.GetSection("SeedUser"));
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
 builder.Services.Configure<EmailCodeOptions>(builder.Configuration.GetSection("EmailCode"));
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddSingleton(sp =>
 {
     var settings = new MutableRuntimeSettings();
@@ -119,6 +145,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseForwardedHeaders();
 app.UseCors("frontend");
 app.UseStaticFiles();
 app.UseAuthentication();

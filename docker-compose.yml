@@ -1,23 +1,36 @@
-version: "3"
-
 networks:
   docker-network:
-    name: docker-network
-    driver: bridge
+    external: true
 
 services:
   veramedia:
     build: .
     working_dir: /app
+
     ports:
       - "5178:8080"
+
     volumes:
       - ./publish:/app
       - ./AppData:/app/AppData
+
+    devices:
+      - /dev/dri:/dev/dri
+
+    group_add:
+      - "video"
+
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
       - TZ=Asia/Shanghai
+      - LIBVA_DRIVER_NAME=iHD
+      - VAAPI_DEVICE=/dev/dri/renderD128
+      - VERAMEDIA_VIDEO_ENCODER=h264_vaapi
+      - VERAMEDIA_VAAPI_SINGLE_PROCESS=false
+      - VERAMEDIA_VAAPI_PARALLELISM=4
+
     restart: unless-stopped
+
     networks:
       - docker-network

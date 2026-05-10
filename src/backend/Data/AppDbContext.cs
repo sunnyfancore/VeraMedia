@@ -60,7 +60,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.ToTable("conversation_messages");
             entity.Property(x => x.Role).HasMaxLength(20);
-            entity.Property(x => x.Content).HasColumnType("text");
+            entity.Property(x => x.Content).HasColumnType("mediumtext");
             entity.Property(x => x.MetadataJson).HasColumnType("text");
             entity.HasOne(x => x.Conversation).WithMany(x => x.Messages).HasForeignKey(x => x.ConversationId);
         });

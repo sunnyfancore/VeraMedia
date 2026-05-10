@@ -17,6 +17,7 @@ public static class DatabaseSeeder
         await EnsureArticleSharesTableAsync(db);
         await EnsureGenerationJobsTableAsync(db);
         await EnsureAuditLogsTableAsync(db);
+        await MigrateContentColumnAsync(db);
 
         var seed = configuration.GetSection("SeedUser").Get<SeedUserOptions>() ?? new SeedUserOptions();
         if (!seed.Enabled || string.IsNullOrWhiteSpace(seed.Email) || string.IsNullOrWhiteSpace(seed.Password))
@@ -253,5 +254,20 @@ public static class DatabaseSeeder
 
         var alterSql = "ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition;
         await db.Database.ExecuteSqlRawAsync(alterSql);
+    }
+
+    private static async Task MigrateContentColumnAsync(AppDbContext db)
+    {
+        if (!db.Database.IsRelational()) return;
+
+        try
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "ALTER TABLE conversation_messages MODIFY COLUMN Content mediumtext NOT NULL");
+        }
+        catch
+        {
+            // Column may already be mediumtext or table structure differs
+        }
     }
 }

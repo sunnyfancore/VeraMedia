@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using VeraMedia.Api.Contracts;
@@ -9,12 +9,15 @@ namespace VeraMedia.Api.Services;
 
 public sealed class ConversationService(AppDbContext db, IAppSettingsService appSettingsService) : IConversationService
 {
-    public async Task<IReadOnlyList<ConversationSummary>> ListAsync(long userId, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<ConversationSummary>> ListAsync(long userId, CancellationToken cancellationToken, int page = 1, int pageSize = 80)
     {
+        page = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 200);
         return await db.Conversations
             .Where(x => x.UserId == userId)
             .OrderByDescending(x => x.UpdatedAt)
-            .Take(80)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .Select(x => new ConversationSummary(x.Id, x.Title, x.UpdatedAt))
             .ToListAsync(cancellationToken);
     }
@@ -103,12 +106,12 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
             .OrderByDescending(x => x.Id)
             .Take(16)
             .OrderBy(x => x.Id)
-            .Select(x => new ChatTurn(x.Role, x.Content))
+            .Select(x => new ChatTurn(x.Role, x.Content, null))
             .ToListAsync(cancellationToken);
 
         if (recent.Count > 0 && recent[^1].Role == "user")
         {
-            recent[^1] = new ChatTurn("user", BuildUserContent(request));
+            recent[^1] = new ChatTurn("user", BuildUserContent(request), request.Attachments);
         }
 
         var promptSettings = await appSettingsService.GetPromptSettingsAsync(cancellationToken);
@@ -237,7 +240,7 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
             "- 每次创作都要有不同的切入角度和表达方式，避免重复。",
             "",
             "文章输出格式：",
-            "# 文章标题：15-25 字，有吸引力和悬念感",
+            "# 这里写 15-25 字的文章标题，有吸引力和悬念感",
             "",
             "{{image:封面图}}",
             "",
@@ -292,19 +295,63 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
                     builder.AppendLine($"- {item.Key}: {item.Value}");
                 }
             }
+
+            var capabilityPrompt = BuildCapabilityExecutionPrompt(request.Options);
+            if (!string.IsNullOrWhiteSpace(capabilityPrompt))
+            {
+                builder.AppendLine();
+                builder.AppendLine(capabilityPrompt);
+            }
+
             if (string.Equals(request.Options.Capability, "ppt", StringComparison.OrdinalIgnoreCase))
             {
                 var pptMode = request.Options.CapabilityParams?.GetValueOrDefault("pptMode") ?? "PPT";
                 var pages = request.Options.CapabilityParams?.GetValueOrDefault("pptPages") ?? "12页";
                 var narration = request.Options.CapabilityParams?.GetValueOrDefault("pptNarration") ?? "关闭";
+                var design = request.Options.CapabilityParams?.GetValueOrDefault("pptDesign") ?? "商务精美";
                 builder.AppendLine();
                 builder.AppendLine("PPT 生成要求：");
                 builder.AppendLine($"- 目标页数：{pages}，请尽量按该页数规划章节和页面。");
+                builder.AppendLine($"- 设计风格：{design}。这是一份成品级精美 PPT 制作任务，不是普通大纲整理。");
+                builder.AppendLine("- 这不是普通 Markdown 文档导出，请按[PPT 制作]方式规划页面。");
+                builder.AppendLine("- 必须输出一个 fenced code block，语言标记为 ppt-spec，内容是严格 JSON。不要把 JSON 当作给用户阅读的正文，前端会渲染为 PPT 制作卡片。");
+                builder.AppendLine("```ppt-spec");
+                builder.AppendLine("{\"title\":\"整套 PPT 标题\",\"subtitle\":\"一句话副标题\",\"audience\":\"受众\",\"theme\":\"商务精美/科技蓝/极简高级/发布会风/数据报告/培训课件\",\"design\":{\"style\":\"整体视觉风格\",\"palette\":\"色彩与质感建议\",\"motif\":\"贯穿全稿的视觉母题\"},\"slides\":[{\"title\":\"页标题\",\"subtitle\":\"可选副标题\",\"layout\":\"cover/agenda/title-content/two-column/section/summary/data-card/process/timeline/quote/stats\",\"bullets\":[\"页面短要点1\",\"页面短要点2\"],\"visual\":\"这一页具体如何画：图表、卡片、流程、对比矩阵、场景配图或视觉隐喻\",\"imageUrl\":\"如果有可用的图片 URL 则填入，系统将自动嵌入该图片到幻灯片中\",\"notes\":\"演讲备注或旁白\"}]}");
+                builder.AppendLine("```");
+                builder.AppendLine("- JSON 外最多给一句简短说明，不要输出长篇 Markdown 大纲。");
+                builder.AppendLine("- 你是在[制作 PPT]，不是[写 PPT 大纲]：必须先决定视觉风格、页面节奏、重点图形和信息层级，再输出规格。");
+                builder.AppendLine();
+                builder.AppendLine("## 页面布局使用规则（极其重要，必须严格遵守）");
+                builder.AppendLine("可选 layout: cover, section, agenda, title-content, two-column, summary, data-card, process, timeline, quote, stats");
+                builder.AppendLine("- 封面(cover)：第一页必须是 cover，设置 title/subtitle。");
+                builder.AppendLine("- 章节页(section)：每个大章节前用 section，写简洁的章节主题。");
+                builder.AppendLine("- 目录(agenda)：第二页建议用 agenda，bullets 列出全稿章节名。");
+                builder.AppendLine("- 流程/时间线(process/timeline)：展示步骤、阶段、路线图时必须用，bullets 列 3-5 个步骤名称。");
+                builder.AppendLine("- 数据卡片(data-card)：展示 KPI、数字、对比指标时用，bullets 写 2-4 个[指标名：数值]格式。");
+                builder.AppendLine("- 双栏对比(two-column)：适合优劣对比、前后对比、两种方案分析，bullets 前半是左栏、后半是右栏。");
+                builder.AppendLine("- 总结(summary)：最后或章节末尾，bullets 写 3-6 个核心结论。");
+                builder.AppendLine("- 引言(quote)：展示金句、客户评价、名人名言，bullets 第一条为引言正文，subtitle 为出处/署名。");
+                builder.AppendLine("- 数据指标(stats)：突出展示 2-4 个核心数字指标，bullets 格式为'指标名：数值'，例如'营收增长：42%'。");
+                builder.AppendLine("- 内容页(title-content)：仅当以上布局都不适用时使用。");
+                builder.AppendLine();
+                builder.AppendLine("## 布局多样性（强制）");
+                builder.AppendLine("- title-content 的使用比例不得超过总页数的 30%。如果 12 页 PPT，最多 3-4 页 title-content。");
+                builder.AppendLine("- 连续相同 layout 最多 2 页（包括 title-content），第 3 页必须换。");
+                builder.AppendLine("- 每份 PPT 至少使用 5 种不同 layout。");
+                builder.AppendLine("- 推荐结构模板：cover → agenda → section → title-content → process/data-card → two-column → quote → section → stats → timeline → summary。");
+                builder.AppendLine("- 优先使用 quote（金句/评价）、stats（核心数字）、process（步骤流程）等富组件布局，避免全是 title-content。");
+                builder.AppendLine();
+                builder.AppendLine("## 内容质量（强制）");
+                builder.AppendLine("- 每页 bullets 控制在 2-5 条，每条不超过 25 个字。标题不超过 12 个字。");
+                builder.AppendLine("- bullets 写结论/数据/行动项，不写描述性长句。好的示例：'Q3 营收同比增长 42%'、'用户留存率提升至 85%'、'3 步完成自动化部署'。");
+                builder.AppendLine("- visual 字段必须具体到图形模块，例如：流程图、时间轴、数据卡片、对比矩阵、场景配图、视觉隐喻等。");
+                builder.AppendLine("- imageUrl 字段：如果用户在对话中上传了图片或之前生成了图片，请将对应的图片 URL 填入相关页面的 imageUrl 字段。系统将自动下载并嵌入到幻灯片中，实现图文结合效果。");
+                builder.AppendLine("- 每页 notes 都要写成可直接放入 PPT 备注区的演讲稿，和该页 bullets 一一对应，便于后续 PPT 转视频时音画同步。");
+                builder.AppendLine("- 如果用户提供资料，先提炼资料中的事实、数字、卖点和结构，再制作 PPT 页面，不要泛泛发挥。");
                 if (string.Equals(pptMode, "PPT视频", StringComparison.OrdinalIgnoreCase))
                 {
-                    builder.AppendLine("- 输出适合制作成 PPT 视频的 Markdown 方案。");
-                    builder.AppendLine("- 按页拆分，每页使用二级标题作为页标题，并包含页面要点、视觉/动画建议、建议时长。");
-                    builder.AppendLine("- 每页必须包含一行“备注：...”或“旁白：...”，用于写入 PPT 备注区和生成音频。");
+                    builder.AppendLine("- 输出适合制作成 PPT 视频的页面规格。");
+                    builder.AppendLine("- 每页 notes 字段必须是可朗读旁白，用于写入 PPT 备注区和生成音频。");
                     builder.AppendLine("- 给出整支视频的结构节奏、开场、转场和收尾。");
                     if (string.Equals(narration, "开启", StringComparison.OrdinalIgnoreCase))
                     {
@@ -314,13 +361,86 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
                 }
                 else
                 {
-                    builder.AppendLine("- 输出适合导出为 PPT 的 Markdown 大纲，每页结构清晰，标题短，页面要点精炼。");
+                    builder.AppendLine("- 输出适合导出为 PPT 的页面规格，每页结构清晰，标题短，页面要点精炼。");
                 }
             }
             builder.AppendLine("请严格按照当前能力模式和能力参数处理用户需求。");
         }
 
         return builder.ToString();
+    }
+
+    private static string BuildCapabilityExecutionPrompt(AgentOptionsDto options)
+    {
+        var capability = options.Capability?.Trim().ToLowerInvariant();
+        var parameters = options.CapabilityParams ?? new Dictionary<string, string>();
+        string GetParam(string key, string fallback) => parameters.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : fallback;
+
+        return capability switch
+        {
+            "quick" => "快速模式执行要求：直接解决用户当前问题，回答要简洁、准确、可执行；不要强行扩写成文章或报告。",
+            "write" => string.Join(Environment.NewLine, [
+                "帮我写作执行要求：",
+                $"- 写作类型：{GetParam("writingType", "公众号文章")}；篇幅：{GetParam("writingLength", "中等")}。",
+                "- 输出完整可直接使用的中文内容，标题、结构、正文要完整。",
+                "- 如果用户上传附件或提供链接，必须先提炼素材中的事实与观点，再进行二次创作。",
+                "- 默认按内容运营场景处理，避免空泛套话，避免输出任务说明。"
+            ]),
+            "code" => string.Join(Environment.NewLine, [
+                "编程模式执行要求：",
+                $"- 语言偏好：{GetParam("codeLanguage", "自动识别")}；任务类型：{GetParam("codeTask", "生成/修复")}。",
+                "- 优先给出原因判断、可执行步骤和必要代码。",
+                "- 如果用户上传代码文件，必须基于附件内容分析，不要假设不存在的文件结构。",
+                "- 代码块要标注语言；涉及命令时给出可复制命令。"
+            ]),
+            "translate" => string.Join(Environment.NewLine, [
+                "翻译模式执行要求：",
+                $"- 目标语言：{GetParam("targetLanguage", "英文")}；翻译风格：{GetParam("translateMode", "自然表达")}。",
+                "- 只输出翻译结果，除非用户要求解释。",
+                "- 保持原意、语气、格式和专有名词一致；必要时采用本地化自然表达。"
+            ]),
+            "research" => string.Join(Environment.NewLine, [
+                "深入研究执行要求：",
+                $"- 研究深度：{GetParam("researchDepth", "标准")}。",
+                "- 输出结构化报告，区分事实、推断和建议。",
+                "- 如果系统提供网页正文或附件内容，必须基于这些来源；不要伪造来源或数据。",
+                "- 结尾给出可执行建议和风险/不确定性。"
+            ]),
+            "qa" => string.Join(Environment.NewLine, [
+                "解题答疑执行要求：",
+                $"- 答疑方式：{GetParam("qaMode", "逐步讲解")}。",
+                "- 先判断题目类型，再分步骤讲解。",
+                "- 对数学、代码、逻辑题要展示关键推导；最后给出明确答案。",
+                "- 如果题图或附件无法读取，先说明需要用户补充题干，不要编造题目内容。"
+            ]),
+            "data" => string.Join(Environment.NewLine, [
+                "数据分析执行要求：",
+                $"- 输出偏好：{GetParam("dataOutput", "洞察+表格")}。",
+                "- 优先基于上传 CSV/XLSX/JSON/TXT 等附件中提取到的数据分析。",
+                "- 输出关键指标、异常点、趋势、结论和下一步建议；适合时使用 Markdown 表格。",
+                "- 如果数据不足或解析失败，明确说明限制，并给出需要补充的数据字段。"
+            ]),
+            "super" => string.Join(Environment.NewLine, [
+                "超能模式执行要求：",
+                "- 先识别用户任务目标，再综合写作、分析、研究、代码或文档能力完成。",
+                "- 对复杂任务给出阶段化结果；需要假设时明确标注。",
+                "- 输出要可交付、可复用，避免只给泛泛建议。"
+            ]),
+            "ppt" => string.Join(Environment.NewLine, [
+                "PPT 生成模式执行要求：",
+                $"- 受众场景：{GetParam("pptAudience", "商务汇报")}。",
+                "- 内容必须适合直接制作 PPT：每页标题短、要点少、表达精炼，并包含 layout、bullets、visual、notes 等页面制作信息。",
+                "- 不要把 PPT 写成普通文章或 Markdown 大纲；必须输出 ppt-spec JSON 规格，后端会按规格生成 PPTX。",
+                "- 如果生成 PPT 视频，要为每页规划可朗读备注/旁白，保证备注与页面内容同步。"
+            ]),
+            "image" => string.Join(Environment.NewLine, [
+                "图像生成模式执行要求：",
+                $"- 图片比例：{options.ImageRatio ?? "1:1"}；风格：{options.ImageStyle ?? "默认"}；模板：{options.ImageTemplate ?? "none"}。",
+                "- 输出应触发直接生图，不要生成长篇文字说明。",
+                "- 如果有参考图，只能作为视觉参考，仍要遵循用户文字需求。"
+            ]),
+            _ => ""
+        };
     }
 
     private static string BuildTitle(string message)

@@ -35,9 +35,14 @@ public interface IAppSettingsService
 
 public sealed class AppSettingsService(AppDbContext db) : IAppSettingsService
 {
+    private static readonly object CacheLock = new();
+    private static Dictionary<string, string>? _cache;
+    private static DateTime _cacheTime;
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(2);
+
     public async Task<AuthEmailSettings> GetAuthEmailSettingsAsync(CancellationToken cancellationToken)
     {
-        var rows = await db.AppSettings.ToDictionaryAsync(x => x.Key, x => x.Value, cancellationToken);
+        var rows = await GetCachedSettingsAsync(cancellationToken);
         return new AuthEmailSettings(
             GetBool(rows, "auth.allowRegistration", true),
             GetBool(rows, "auth.requireEmailCode", false),
@@ -69,11 +74,12 @@ public sealed class AppSettingsService(AppDbContext db) : IAppSettingsService
         await SetAsync("email.fromName", settings.FromName ?? "内容运营助手", cancellationToken);
         await SetAsync("email.codeMinutes", Math.Max(1, settings.CodeMinutes).ToString(), cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        InvalidateCache();
     }
 
     public async Task<PromptSettings> GetPromptSettingsAsync(CancellationToken cancellationToken)
     {
-        var rows = await db.AppSettings.ToDictionaryAsync(x => x.Key, x => x.Value, cancellationToken);
+        var rows = await GetCachedSettingsAsync(cancellationToken);
         return new PromptSettings(
             Get(rows, "prompt.global", ""),
             Get(rows, "prompt.chat", ""),
@@ -94,6 +100,34 @@ public sealed class AppSettingsService(AppDbContext db) : IAppSettingsService
         await SetAsync("prompt.rewrite", settings.Rewrite ?? "", cancellationToken);
         await SetAsync("prompt.layout", settings.Layout ?? "", cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        InvalidateCache();
+    }
+
+    private async Task<Dictionary<string, string>> GetCachedSettingsAsync(CancellationToken cancellationToken)
+    {
+        lock (CacheLock)
+        {
+            if (_cache is not null && DateTime.UtcNow - _cacheTime < CacheTtl)
+                return _cache;
+        }
+
+        var rows = await db.AppSettings.ToDictionaryAsync(x => x.Key, x => x.Value, cancellationToken);
+
+        lock (CacheLock)
+        {
+            _cache = rows;
+            _cacheTime = DateTime.UtcNow;
+        }
+
+        return rows;
+    }
+
+    private static void InvalidateCache()
+    {
+        lock (CacheLock)
+        {
+            _cache = null;
+        }
     }
 
     private async Task SetAsync(string key, string value, CancellationToken cancellationToken)

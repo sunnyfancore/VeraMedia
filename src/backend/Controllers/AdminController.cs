@@ -9,7 +9,7 @@ using VeraMedia.Api.Services;
 namespace VeraMedia.Api.Controllers;
 
 [ApiController]
-[Authorize]
+[Authorize(Policy = "Admin")]
 [Route("api/admin")]
 public sealed class AdminController(
     AppDbContext db,
@@ -19,22 +19,25 @@ public sealed class AdminController(
     [HttpGet("dashboard")]
     public async Task<ActionResult<AdminDashboardStatsDto>> Dashboard(CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
-
         var staleBefore = DateTime.UtcNow.AddMinutes(-20);
-        var staleJobs = await db.GenerationJobs
+        var staleJobsTask = db.GenerationJobs
             .CountAsync(x => (x.Status == GenerationJobStatuses.Pending || x.Status == GenerationJobStatuses.Running) && x.UpdatedAt < staleBefore, cancellationToken);
-        var totalUsers = await db.Users.CountAsync(cancellationToken);
-        var enabledUsers = await db.Users.CountAsync(x => x.IsEnabled, cancellationToken);
-        var totalConversations = await db.Conversations.CountAsync(cancellationToken);
-        var totalJobs = await db.GenerationJobs.CountAsync(cancellationToken);
-        var pendingJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Pending, cancellationToken);
-        var runningJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Running, cancellationToken);
-        var completedJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Completed, cancellationToken);
-        var failedJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Failed, cancellationToken);
-        var canceledJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Canceled, cancellationToken);
-        var articleAssets = await db.Articles.CountAsync(cancellationToken);
-        var imageAssets = await db.GeneratedImages.CountAsync(cancellationToken);
+        var totalUsersTask = db.Users.CountAsync(cancellationToken);
+        var enabledUsersTask = db.Users.CountAsync(x => x.IsEnabled, cancellationToken);
+        var totalConversationsTask = db.Conversations.CountAsync(cancellationToken);
+        var totalJobsTask = db.GenerationJobs.CountAsync(cancellationToken);
+        var pendingJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Pending, cancellationToken);
+        var runningJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Running, cancellationToken);
+        var completedJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Completed, cancellationToken);
+        var failedJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Failed, cancellationToken);
+        var canceledJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Canceled, cancellationToken);
+        var articleAssetsTask = db.Articles.CountAsync(cancellationToken);
+        var imageAssetsTask = db.GeneratedImages.CountAsync(cancellationToken);
+
+        await Task.WhenAll(
+            staleJobsTask, totalUsersTask, enabledUsersTask, totalConversationsTask,
+            totalJobsTask, pendingJobsTask, runningJobsTask, completedJobsTask,
+            failedJobsTask, canceledJobsTask, articleAssetsTask, imageAssetsTask);
 
         var recentFailures = await db.GenerationJobs
             .AsNoTracking()
@@ -110,18 +113,18 @@ public sealed class AdminController(
             .ToList();
 
         return Ok(new AdminDashboardStatsDto(
-            totalUsers,
-            enabledUsers,
-            totalConversations,
-            totalJobs,
-            pendingJobs,
-            runningJobs,
-            completedJobs,
-            failedJobs,
-            canceledJobs,
-            staleJobs,
-            articleAssets,
-            imageAssets,
+            totalUsersTask.Result,
+            enabledUsersTask.Result,
+            totalConversationsTask.Result,
+            totalJobsTask.Result,
+            pendingJobsTask.Result,
+            runningJobsTask.Result,
+            completedJobsTask.Result,
+            failedJobsTask.Result,
+            canceledJobsTask.Result,
+            staleJobsTask.Result,
+            articleAssetsTask.Result,
+            imageAssetsTask.Result,
             recentFailures,
             recentIntents,
             recentAudits));
@@ -130,8 +133,6 @@ public sealed class AdminController(
     [HttpPost("jobs/mark-stale-failed")]
     public async Task<IActionResult> MarkStaleJobsFailed(CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
-
         var staleBefore = DateTime.UtcNow.AddMinutes(-20);
         var jobs = await db.GenerationJobs
             .Include(x => x.AssistantMessage)
@@ -163,7 +164,6 @@ public sealed class AdminController(
     [HttpGet("users")]
     public async Task<ActionResult<IReadOnlyList<AdminUserDto>>> Users(CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         var rows = await db.Users
             .OrderByDescending(x => x.Id)
             .Select(x => new AdminUserDto(x.Id, x.Email, x.DisplayName, x.IsAdmin, x.IsEnabled, x.CreatedAt))
@@ -174,7 +174,6 @@ public sealed class AdminController(
     [HttpPost("users")]
     public async Task<ActionResult<AdminUserDto>> CreateUser(AdminCreateUserRequest request, CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         var email = request.Email.Trim().ToLowerInvariant();
         if (await db.Users.AnyAsync(x => x.Email == email, cancellationToken))
         {
@@ -198,7 +197,6 @@ public sealed class AdminController(
     [HttpPut("users/{id:long}")]
     public async Task<ActionResult<AdminUserDto>> UpdateUser(long id, AdminUpdateUserRequest request, CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         var user = await db.Users.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (user is null) return NotFound(new { message = "用户不存在。" });
 
@@ -213,7 +211,6 @@ public sealed class AdminController(
     [HttpPost("users/{id:long}/password")]
     public async Task<IActionResult> ResetUserPassword(long id, AdminResetPasswordRequest request, CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         var user = await db.Users.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (user is null) return NotFound(new { message = "用户不存在。" });
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
@@ -225,7 +222,6 @@ public sealed class AdminController(
     [HttpGet("users/{id:long}/provider")]
     public async Task<ActionResult<ProviderResponse>> UserProvider(long id, CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         if (!await db.Users.AnyAsync(x => x.Id == id, cancellationToken)) return NotFound(new { message = "用户不存在。" });
 
         var provider = await db.AiProviders
@@ -242,7 +238,6 @@ public sealed class AdminController(
     [HttpPost("users/{id:long}/provider")]
     public async Task<ActionResult<ProviderResponse>> SaveUserProvider(long id, ProviderRequest request, CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         if (!await db.Users.AnyAsync(x => x.Id == id, cancellationToken)) return NotFound(new { message = "用户不存在。" });
 
         var name = string.IsNullOrWhiteSpace(request.Name) ? "OpenAI" : request.Name.Trim();
@@ -281,7 +276,6 @@ public sealed class AdminController(
     [HttpPost("users/{id:long}/provider/copy-current")]
     public async Task<ActionResult<ProviderResponse>> CopyCurrentProviderToUser(long id, CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         if (!await db.Users.AnyAsync(x => x.Id == id, cancellationToken)) return NotFound(new { message = "用户不存在。" });
 
         var adminUserId = User.GetUserId();
@@ -326,7 +320,6 @@ public sealed class AdminController(
     [HttpGet("runtime-config")]
     public async Task<ActionResult<AdminRuntimeConfigDto>> RuntimeConfig()
     {
-        if (!User.IsAdmin()) return Forbid();
         var settings = await appSettingsService.GetAuthEmailSettingsAsync(HttpContext.RequestAborted);
         return Ok(new AdminRuntimeConfigDto(
             settings.AllowRegistration,
@@ -344,7 +337,6 @@ public sealed class AdminController(
     [HttpPost("runtime-config")]
     public async Task<ActionResult<AdminRuntimeConfigDto>> SaveRuntimeConfig(AdminRuntimeConfigRequest request, CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         await appSettingsService.SaveAuthEmailSettingsAsync(new AuthEmailSettings(
             request.AllowRegistration,
             request.RequireEmailCode,
@@ -364,7 +356,6 @@ public sealed class AdminController(
     [HttpGet("prompt-config")]
     public async Task<ActionResult<AdminPromptConfigDto>> PromptConfig(CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         var settings = await appSettingsService.GetPromptSettingsAsync(cancellationToken);
         return Ok(new AdminPromptConfigDto(
             settings.Global,
@@ -379,7 +370,6 @@ public sealed class AdminController(
     [HttpPost("prompt-config")]
     public async Task<ActionResult<AdminPromptConfigDto>> SavePromptConfig(AdminPromptConfigDto request, CancellationToken cancellationToken)
     {
-        if (!User.IsAdmin()) return Forbid();
         await appSettingsService.SavePromptSettingsAsync(new PromptSettings(
             request.Global,
             request.Chat,

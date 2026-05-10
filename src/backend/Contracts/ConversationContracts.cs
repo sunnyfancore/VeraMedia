@@ -47,5 +47,6 @@ public sealed record RetryImageResponse(string Title, string? Url, string? Error
 public sealed record GenerateImageRequest(string Title, string Prompt);
 public sealed record GenerateImageResponse(string Title, string Prompt, string? Url, string? Error, bool IsPartial = false);
 public sealed record UpdateMessageRequest(string Content);
+public sealed record MessageFeedbackRequest(string Type, string? Detail = null);
 public sealed record EditDocumentRequest(string Content, string Instruction, string? Selection);
 public sealed record EditDocumentResponse(string Content);

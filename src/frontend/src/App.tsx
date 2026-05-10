@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import type { ClipboardEvent, CSSProperties, DragEvent, FormEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { useLayoutEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
@@ -79,6 +79,7 @@ import {
   Menu,
   MessageSquarePlus,
   MoreHorizontal,
+  Music,
   PanelRightOpen,
   Plus,
   Presentation,
@@ -92,6 +93,7 @@ import {
   Table as TableIcon,
   Trash2,
   Undo2,
+  UploadCloud,
   UserPlus,
   Users,
   Video,
@@ -101,6 +103,7 @@ import {
   CircleHelp,
   ChartColumn,
   Volume2,
+  Play,
 } from 'lucide-react'
 import './App.css'
 
@@ -149,10 +152,106 @@ const moreCapabilities: Array<{ key: CapabilityKey; label: string; icon: ReactNo
 
 const imageRatios = ['1:1', '4:3', '3:4', '16:9', '9:16'] as const
 const imageStyles = ['默认', '写实摄影', '商业海报', '插画', '3D 渲染', '国潮'] as const
+const writingTypeOptions = ['公众号文章', '小红书笔记', '新闻稿', '短视频脚本', '商务文档', '社媒文案'] as const
+const writingLengthOptions = ['短篇', '中等', '长篇', '深度长文'] as const
+const codeLanguageOptions = ['自动识别', 'TypeScript', 'JavaScript', 'Python', 'C#', 'Java', 'Go', 'SQL'] as const
+const codeTaskOptions = ['生成/修复', '解释代码', '排查报错', '重构优化', '写测试', '接口调试'] as const
 const targetLanguages = ['中文（简体）', '英文', '日文', '韩文', '西班牙文'] as const
+const translateModeOptions = ['自然表达', '忠实直译', '商务正式', '口语本地化'] as const
+const researchDepthOptions = ['标准', '深度', '竞品分析', '资料综述', '行动方案'] as const
+const qaModeOptions = ['逐步讲解', '只给答案', '先提示后答案', '举一反三'] as const
+const dataOutputOptions = ['洞察+表格', '只要结论', '详细分析', '可视化建议', '清洗建议'] as const
 const pptPageOptions = ['6页', '8页', '10页', '12页', '15页', '20页', '25页', '30页'] as const
+const pptAudienceOptions = ['商务汇报', '销售路演', '培训课件', '项目复盘', '产品介绍', '研究报告'] as const
+const pptDesignOptions = ['商务精美', '科技蓝', '极简高级', '发布会风', '数据报告', '培训课件'] as const
 const pptModeOptions = ['PPT', 'PPT视频'] as const
 const pptNarrationOptions = ['开启', '关闭'] as const
+type PptVideoSlide = { index: number; title: string; notes: string }
+type PptVideoEncoderState = {
+  encoder?: string
+  mode?: string
+  label?: string
+  device?: string
+}
+type PptVideoSettings = {
+  voice: string
+  speed: string
+  bgmName: string
+  volume: number
+  resolution: string
+  secondsPerSlide: string
+}
+type PptSpecSlide = {
+  title?: string
+  subtitle?: string
+  layout?: string
+  bullets?: string[]
+  points?: string[]
+  visual?: string
+  visualSuggestion?: string
+  notes?: string
+  narration?: string
+}
+type PptSpec = {
+  title?: string
+  subtitle?: string
+  audience?: string
+  theme?: string
+  slides?: PptSpecSlide[]
+}
+const pptVideoVoiceOptions = [
+  // ── 在线 Edge TTS（高品质在线语音）──
+  { value: 'zh', label: '中文女声·晓晓（在线）' },
+  { value: 'zh-m', label: '中文男声·云希（在线）' },
+  { value: 'zh-news', label: '中文新闻·云扬（在线）' },
+  { value: 'zh-story', label: '中文故事·晓伊（在线）' },
+  { value: 'zh-gentle', label: '中文温柔·晓辰（在线）' },
+  { value: 'zh-cheerful', label: '中文活泼·晓萱（在线）' },
+  { value: 'zh-boy', label: '中文少年·云枫（在线）' },
+  { value: 'zh-senior', label: '中文沉稳·云健（在线）' },
+  { value: 'en', label: 'English Female · Jenny（在线）' },
+  { value: 'en-m', label: 'English Male · Guy（在线）' },
+  { value: 'en-aria', label: 'English · Aria（在线）' },
+  { value: 'en-davis', label: 'English · Davis（在线）' },
+  { value: 'en-gb', label: 'English UK · Sonia（在线）' },
+  { value: 'en-gb-m', label: 'English UK · Ryan（在线）' },
+  { value: 'ja', label: '日本語・七海（在线）' },
+  { value: 'ja-m', label: '日本語・圭太（在线）' },
+  { value: 'ko', label: '한국어 · 선히（在线）' },
+  { value: 'ko-m', label: '한국어 · 인준（在线）' },
+] as const
+const pptVideoSpeedOptions = ['0.75x', '1.0x', '1.25x', '1.5x'] as const
+const pptVideoResolutionOptions = [
+  { value: '720p', label: '标清 720p（1280x720）' },
+  { value: '1080p', label: '高清 1080p（1920x1080）' },
+  { value: '2k', label: '超清 2K（2560x1440）' },
+  { value: '480p', label: '流畅 480p（854x480）' },
+] as const
+const readPptVideoEncoder = (status: {
+  videoEncoder?: string
+  videoEncoderMode?: string
+  videoEncoderLabel?: string
+  videoEncoderDevice?: string
+}): PptVideoEncoderState | null => {
+  if (!status.videoEncoder && !status.videoEncoderLabel) return null
+  return {
+    encoder: status.videoEncoder,
+    mode: status.videoEncoderMode,
+    label: status.videoEncoderLabel,
+    device: status.videoEncoderDevice,
+  }
+}
+
+const getPptVideoProgressDetail = (phase: string, status: string) => {
+  const trimmedPhase = phase.trim()
+  const trimmedStatus = status.trim()
+  if (!trimmedStatus) return ''
+  if (trimmedPhase && trimmedStatus.startsWith(trimmedPhase)) {
+    return trimmedStatus.slice(trimmedPhase.length).trim()
+  }
+  return trimmedStatus
+}
+
 const imageTemplates = [
   { value: 'none', label: '模板', prompt: '' },
   { value: 'cover', label: '封面图', prompt: '生成一张适合中文内容平台的封面图，主体明确，画面有传播感。' },
@@ -363,10 +462,11 @@ function App() {
   const [isThinkingMenuOpen, setIsThinkingMenuOpen] = useState(false)
   const [openToolbarSelect, setOpenToolbarSelect] = useState<string | null>(null)
   const [toolbarSelectPosition, setToolbarSelectPosition] = useState<{ left: number; bottom: number; minWidth: number } | null>(null)
+  const [thinkingMenuPosition, setThinkingMenuPosition] = useState<{ left: number; bottom: number; minWidth: number } | null>(null)
   const [isComposerDragging, setIsComposerDragging] = useState(false)
   const [showScrollToBottom, setShowScrollToBottom] = useState(false)
 
-  const [activePage, setActivePage] = useState<'chat' | 'admin' | 'editor' | 'tasks' | 'assets' | 'images'>('chat')
+  const [activePage, setActivePage] = useState<'chat' | 'admin' | 'editor' | 'tasks' | 'assets' | 'images' | 'pptVideo'>('chat')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [provider, setProvider] = useState({
@@ -443,6 +543,35 @@ function App() {
   const [articleAssets, setArticleAssets] = useState<ArticleAsset[]>([])
   const [imageAssets, setImageAssets] = useState<ImageAsset[]>([])
   const [assetsLoading, setAssetsLoading] = useState(false)
+  const [pptVideoBusy, setPptVideoBusy] = useState(false)
+  const [pptVideoPreviewBusy, setPptVideoPreviewBusy] = useState(false)
+  const [pptVideoStatus, setPptVideoStatus] = useState('')
+  const [pptVideoPhase, setPptVideoPhase] = useState('')
+  const [pptVideoFile, setPptVideoFile] = useState<File | null>(null)
+  const [pptVideoBgmFile, setPptVideoBgmFile] = useState<File | null>(null)
+  const [pptVideoSlides, setPptVideoSlides] = useState<PptVideoSlide[]>([])
+  const [pptVideoPreviewId, setPptVideoPreviewId] = useState<string | null>(null)
+  const [pptVideoProgress, setPptVideoProgress] = useState(0)
+  const [pptVideoLightboxSrc, setPptVideoLightboxSrc] = useState<string | null>(null)
+  const [voiceSamplePlaying, setVoiceSamplePlaying] = useState(false)
+  const voiceSampleRef = useRef<HTMLAudioElement | null>(null)
+  const [pptVideoDownload, setPptVideoDownload] = useState<{ url: string; name: string } | null>(null)
+  const [pptVideoEncoder, setPptVideoEncoder] = useState<PptVideoEncoderState | null>(null)
+  const [pptVideoElapsed, setPptVideoElapsed] = useState(0)
+  const [pptVideoSettings, setPptVideoSettings] = useState<PptVideoSettings>({
+    voice: 'zh',
+    speed: '1.0x',
+    bgmName: '',
+    volume: 30,
+    resolution: '720p',
+    secondsPerSlide: '5',
+  })
+  const pptVideoProgressDetail = getPptVideoProgressDetail(pptVideoPhase, pptVideoStatus)
+  const pptVideoProgressInlineDetail = /^\([^)]*\)$/.test(pptVideoProgressDetail) ? pptVideoProgressDetail : ''
+  const pptVideoProgressMessage = pptVideoProgressInlineDetail
+    ? ''
+    : pptVideoProgressDetail || (!pptVideoPhase && !pptVideoStatus ? '就绪，等待操作...' : '')
+  const pptVideoProgressTitle = `${pptVideoPhase || '处理进度'}${pptVideoProgressInlineDetail ? ` ${pptVideoProgressInlineDetail}` : ''}`
   const [articleVersions, setArticleVersions] = useState<ArticleVersion[] | null>(null)
   const [articleVersionTitle, setArticleVersionTitle] = useState('')
   const [articleVersionProjectId, setArticleVersionProjectId] = useState<number | null>(null)
@@ -474,6 +603,7 @@ function App() {
       dataOutput: '洞察+表格',
       pptPages: '12页',
       pptAudience: '商务汇报',
+      pptDesign: '商务精美',
       pptMode: 'PPT',
       pptNarration: '开启',
     } as Record<string, string>,
@@ -498,6 +628,9 @@ function App() {
 
   useEffect(() => { conversationIdRef.current = conversationId }, [conversationId])
   useEffect(() => { previewMessageRef.current = previewMessage }, [previewMessage])
+  useEffect(() => () => {
+    if (pptVideoDownload) window.URL.revokeObjectURL(pptVideoDownload.url)
+  }, [pptVideoDownload])
 
   useEffect(() => {
     if (token) return
@@ -1104,6 +1237,12 @@ function App() {
     void loadAssets()
   }
 
+  function openPptVideoPage() {
+    rememberChatScroll()
+    setIsMobileNavOpen(false)
+    setActivePage('pptVideo')
+  }
+
   async function editAdminProvider(item: AdminUser) {
     setAdminProviderUserId(item.id)
     setAdminProviderStatus('正在加载账号 API 配置...')
@@ -1229,6 +1368,7 @@ function App() {
           ...next.capabilityParams,
           pptMode: next.capabilityParams.pptMode || 'PPT',
           pptNarration: next.capabilityParams.pptNarration || '开启',
+          pptDesign: next.capabilityParams.pptDesign || '商务精美',
         }
       }
       if (key === 'research' || key === 'super') {
@@ -1246,6 +1386,8 @@ function App() {
   }
 
   function leaveCapabilityMode() {
+    setIsThinkingMenuOpen(false)
+    setThinkingMenuPosition(null)
     setAgentOptions((current) => ({ ...current, intentMode: 'auto', capability: 'quick', outputFormat: 'article', thinkingMode: 'quick', enableWebSearch: true }))
   }
 
@@ -1261,6 +1403,7 @@ function App() {
 
   function selectThinkingMode(mode: ThinkingMode) {
     setIsThinkingMenuOpen(false)
+    setThinkingMenuPosition(null)
     setAgentOptions((current) => ({ ...current, thinkingMode: mode }))
   }
 
@@ -1273,9 +1416,23 @@ function App() {
         <button
           className={isThinkingMenuOpen ? 'capability-button active' : 'capability-button'}
           type="button"
-          onClick={() => {
+          onClick={(event) => {
+            const closing = isThinkingMenuOpen
             setIsToolMenuOpen(false)
-            setIsThinkingMenuOpen((value) => !value)
+            setOpenToolbarSelect(null)
+            setToolbarSelectPosition(null)
+            if (closing) {
+              setIsThinkingMenuOpen(false)
+              setThinkingMenuPosition(null)
+              return
+            }
+            const rect = event.currentTarget.getBoundingClientRect()
+            setThinkingMenuPosition({
+              left: Math.round(rect.left + rect.width / 2),
+              bottom: Math.round(window.innerHeight - rect.top + 10),
+              minWidth: Math.max(216, Math.round(rect.width + 112)),
+            })
+            setIsThinkingMenuOpen(true)
           }}
           title="选择思考层级"
         >
@@ -1284,7 +1441,14 @@ function App() {
           <ChevronDown className="thinking-mode-chevron" size={15} />
         </button>
         {isThinkingMenuOpen && (
-          <div className="thinking-mode-menu">
+          <div
+            className="thinking-mode-menu"
+            style={thinkingMenuPosition ? ({
+              left: `${thinkingMenuPosition.left}px`,
+              bottom: `${thinkingMenuPosition.bottom}px`,
+              minWidth: `${thinkingMenuPosition.minWidth}px`,
+            } as CSSProperties) : undefined}
+          >
             {thinkingModes.map((item) => (
               <button className={mode === item.key ? 'active' : ''} type="button" key={item.key} onClick={() => selectThinkingMode(item.key)}>
                 {item.icon}
@@ -1316,6 +1480,7 @@ function App() {
       const closing = openToolbarSelect === id
       setIsToolMenuOpen(false)
       setIsThinkingMenuOpen(false)
+      setThinkingMenuPosition(null)
       if (closing) {
         setOpenToolbarSelect(null)
         setToolbarSelectPosition(null)
@@ -1440,6 +1605,22 @@ function App() {
             帮我写作
             <button type="button" title="退出帮我写作" onClick={leaveCapabilityMode}><X size={14} /></button>
           </span>
+          {renderToolbarSelect(
+            'writing-type',
+            params.writingType,
+            writingTypeOptions,
+            (value) => updateCapabilityParam('writingType', value),
+            <FileText size={17} />,
+            '写作类型',
+          )}
+          {renderToolbarSelect(
+            'writing-length',
+            params.writingLength,
+            writingLengthOptions,
+            (value) => updateCapabilityParam('writingLength', value),
+            <List size={17} />,
+            '篇幅',
+          )}
           {renderThinkingSelector()}
           <label className="capability-button image-reference-button" title="上传文件">
             <LinkIcon size={17} />
@@ -1463,10 +1644,22 @@ function App() {
             上传文件
             <input type="file" accept={attachmentAccept} multiple onChange={(e) => uploadFiles(e.target.files)} />
           </label>
-          <button className="capability-button" type="button" onClick={() => showToast('开源仓库导入功能准备中')}>
-            <Braces size={17} />
-            引入开源仓库
-          </button>
+          {renderToolbarSelect(
+            'code-language',
+            params.codeLanguage,
+            codeLanguageOptions,
+            (value) => updateCapabilityParam('codeLanguage', value),
+            <Braces size={17} />,
+            '代码语言',
+          )}
+          {renderToolbarSelect(
+            'code-task',
+            params.codeTask,
+            codeTaskOptions,
+            (value) => updateCapabilityParam('codeTask', value),
+            <List size={17} />,
+            '任务类型',
+          )}
           {renderThinkingSelector()}
         </div>
       )
@@ -1488,6 +1681,14 @@ function App() {
             <Languages size={17} />,
             '目标语言',
           )}
+          {renderToolbarSelect(
+            'translate-mode',
+            params.translateMode,
+            translateModeOptions,
+            (value) => updateCapabilityParam('translateMode', value),
+            <FileText size={17} />,
+            '翻译风格',
+          )}
         </div>
       )
     }
@@ -1500,6 +1701,15 @@ function App() {
             深入研究
             <button type="button" title="退出深入研究" onClick={leaveCapabilityMode}><X size={14} /></button>
           </span>
+          {renderToolbarSelect(
+            'research-depth',
+            params.researchDepth,
+            researchDepthOptions,
+            (value) => updateCapabilityParam('researchDepth', value),
+            <Globe2 size={17} />,
+            '研究深度',
+          )}
+          {renderThinkingSelector()}
         </div>
       )
     }
@@ -1517,6 +1727,15 @@ function App() {
             上传题目图片
             <input type="file" accept="image/*" multiple onChange={(e) => uploadFiles(e.target.files)} />
           </label>
+          {renderToolbarSelect(
+            'qa-mode',
+            params.qaMode,
+            qaModeOptions,
+            (value) => updateCapabilityParam('qaMode', value),
+            <CircleHelp size={17} />,
+            '答疑方式',
+          )}
+          {renderThinkingSelector()}
         </div>
       )
     }
@@ -1530,6 +1749,14 @@ function App() {
             <button type="button" title="退出数据分析" onClick={leaveCapabilityMode}><X size={14} /></button>
           </span>
           {renderThinkingSelector()}
+          {renderToolbarSelect(
+            'data-output',
+            params.dataOutput,
+            dataOutputOptions,
+            (value) => updateCapabilityParam('dataOutput', value),
+            <ChartColumn size={17} />,
+            '输出方式',
+          )}
           <label className="capability-button image-reference-button" title="上传文件">
             <LinkIcon size={17} />
             上传文件
@@ -1553,6 +1780,7 @@ function App() {
             上传文件
             <input type="file" accept={attachmentAccept} multiple onChange={(e) => uploadFiles(e.target.files)} />
           </label>
+          {renderThinkingSelector()}
         </div>
       )
     }
@@ -1577,6 +1805,22 @@ function App() {
             (value) => updateCapabilityParam('pptPages', value),
             <List size={17} />,
             '篇幅',
+          )}
+          {renderToolbarSelect(
+            'ppt-audience',
+            params.pptAudience,
+            pptAudienceOptions,
+            (value) => updateCapabilityParam('pptAudience', value),
+            <Users size={17} />,
+            '受众',
+          )}
+          {renderToolbarSelect(
+            'ppt-design',
+            params.pptDesign,
+            pptDesignOptions,
+            (value) => updateCapabilityParam('pptDesign', value),
+            <Sparkles size={17} />,
+            '设计风格',
           )}
           {renderToolbarSelect(
             'ppt-mode',
@@ -1637,20 +1881,21 @@ function App() {
   }
 
   async function submitMessage(content: string) {
-    if (!content || isStreaming || sendingRef.current) return
+    const normalizedContent = content || buildAttachmentOnlyPrompt()
+    if (!normalizedContent || isStreaming || sendingRef.current) return
 
     sendingRef.current = true
     setDraft('')
     try {
       const job = await request<GenerationJob>('/api/conversations/jobs', {
         method: 'POST',
-        body: JSON.stringify({ content, conversationId, attachments, options: agentOptions }),
+        body: JSON.stringify({ content: normalizedContent, conversationId, attachments, options: agentOptions }),
       })
       setConversationId(job.conversationId)
       setStreamingMessageId(job.assistantMessageId)
       setMessages((current) => [
         ...current,
-        { id: job.userMessageId, role: 'user', content, createdAt: new Date().toISOString() },
+        { id: job.userMessageId, role: 'user', content: normalizedContent, createdAt: new Date().toISOString() },
         {
           id: job.assistantMessageId,
           role: 'assistant',
@@ -1669,8 +1914,52 @@ function App() {
     }
   }
 
+  function buildAttachmentOnlyPrompt() {
+    if (attachments.length === 0) return ''
+    const names = attachments.map((item) => item.fileName).join('、')
+    switch (agentOptions.capability) {
+      case 'data':
+        return `请分析我上传的数据文件：${names}。输出关键指标、异常点、趋势洞察和下一步建议。`
+      case 'write':
+        return `请基于我上传的资料写作成文：${names}。`
+      case 'code':
+        return `请分析我上传的代码或技术文件：${names}，指出问题并给出修改建议。`
+      case 'translate':
+        return `请将我上传文件中的主要内容翻译为${agentOptions.capabilityParams.targetLanguage || '目标语言'}：${names}。`
+      case 'qa':
+        return `请解答我上传的题目图片或文件：${names}。`
+      case 'research':
+        return `请基于我上传的资料做深入研究和结构化整理：${names}。`
+      case 'ppt':
+        return `请基于我上传的资料制作${agentOptions.capabilityParams.pptDesign || '商务精美'}风格的${agentOptions.capabilityParams.pptMode || 'PPT'}：${names}。`
+      case 'image':
+        return `请参考我上传的图片生成新图片：${names}。`
+      default:
+        return `请处理我上传的附件：${names}。`
+    }
+  }
+
   async function retryFromMessage(message: Message) {
     await submitMessage(message.content)
+  }
+
+  async function readErrorMessage(response: Response, fallback: string) {
+    const contentType = response.headers.get('content-type') || ''
+    const prefix = `${fallback}（HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}）`
+    if (contentType.includes('application/json')) {
+      const body = await response.json().catch(() => ({}))
+      const parts = [
+        typeof body.message === 'string' ? body.message : '',
+        typeof body.requestId === 'string' && body.requestId ? `诊断编号：${body.requestId}` : '',
+        typeof body.stage === 'string' && body.stage ? `失败阶段：${body.stage}` : '',
+        typeof body.stderr === 'string' && body.stderr ? `诊断日志：\n${body.stderr}` : '',
+        typeof body.detail === 'string' && body.detail ? `详情：\n${body.detail}` : '',
+      ].filter((item) => item.trim())
+      return parts.length > 0 ? `${prefix}\n\n${parts.join('\n\n')}` : prefix
+    }
+
+    const text = await response.text().catch(() => '')
+    return text.trim() ? `${prefix}\n\n${text.trim()}` : prefix
   }
 
   async function downloadMessageExport(message: Message, format: 'docx' | 'pptx' | 'mp4') {
@@ -1678,25 +1967,128 @@ function App() {
     if (!cid || isMessageGenerating(message)) return
 
     try {
+      if (format === 'mp4') {
+        await downloadMessageVideo(message)
+        return
+      }
+
       const response = await fetchWithAuth(`${API_BASE}/api/conversations/${cid}/messages/${message.id}/export?format=${format}`)
       if (!response.ok) {
-        const body = await response.json().catch(() => ({}))
-        throw new Error(typeof body.message === 'string' ? body.message : '导出失败')
+        throw new Error(await readErrorMessage(response, '导出失败'))
       }
 
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
-      const title = getCleanDocumentTitle(cleanArticleContent(message.content)).replace(/[\\/:*?"<>|]+/g, '').slice(0, 32) || 'VeraMedia'
+      const title = getCleanDocumentTitle(cleanArticleContent(message.content)).replace(/[\\/:*?"<>|""«»]+/g, '').slice(0, 32) || 'VeraMedia'
       link.href = url
       link.download = `${title}.${format}`
       document.body.appendChild(link)
       link.click()
       link.remove()
-      window.URL.revokeObjectURL(url)
-      showToast(format === 'mp4' ? '视频已生成' : format === 'pptx' ? 'PPTX 已生成' : 'DOCX 已生成')
+      setTimeout(() => window.URL.revokeObjectURL(url), 5000)
+      showToast(format === 'pptx' ? 'PPTX 已生成' : 'DOCX 已生成')
     } catch (error) {
       showToast(error instanceof Error ? error.message : '导出失败')
+    }
+  }
+
+  async function downloadMessageVideo(message: Message) {
+    const cid = conversationIdRef.current
+    if (!cid) return
+
+    const startTime = Date.now()
+    const timer = window.setInterval(() => setPptVideoElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000)
+    setPptVideoBusy(true)
+    setPptVideoProgress(5)
+    setPptVideoPhase('提交视频任务')
+    setPptVideoStatus('正在从 PPT 方案生成视频...')
+    setPptVideoEncoder(null)
+    setPptVideoDownload((current) => {
+      if (current) window.URL.revokeObjectURL(current.url)
+      return null
+    })
+
+    try {
+      const submitResponse = await fetchWithAuth(`${API_BASE}/api/conversations/${cid}/messages/${message.id}/export-video`, { method: 'POST' })
+      if (!submitResponse.ok) {
+        throw new Error(await readErrorMessage(submitResponse, '提交视频任务失败'))
+      }
+
+      const { taskId } = await submitResponse.json() as { taskId: string }
+      setPptVideoPhase('排队中')
+      setPptVideoProgress(10)
+
+      await new Promise<void>((resolve, reject) => {
+        const pollInterval = window.setInterval(async () => {
+          try {
+            const statusResponse = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/${taskId}/status`)
+            if (!statusResponse.ok) {
+              window.clearInterval(pollInterval)
+              reject(new Error('获取任务状态失败'))
+              return
+            }
+            const status = await statusResponse.json() as {
+              status: string
+              stage: string
+              progress: number
+              slideIndex: number
+              slideTotal: number
+              error?: string
+              fileName?: string
+              videoEncoder?: string
+              videoEncoderMode?: string
+              videoEncoderLabel?: string
+              videoEncoderDevice?: string
+            }
+
+            setPptVideoPhase(status.stage || '处理中')
+            setPptVideoProgress(status.progress)
+            setPptVideoEncoder(readPptVideoEncoder(status))
+            const slideInfo = status.slideTotal > 0 ? ` (${status.slideIndex}/${status.slideTotal})` : ''
+            setPptVideoStatus(`${status.stage || '处理中'}${slideInfo}`)
+
+            if (status.status === 'completed') {
+              window.clearInterval(pollInterval)
+              const downloadResponse = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/${taskId}/download`)
+              if (!downloadResponse.ok) {
+                reject(new Error('下载视频失败'))
+                return
+              }
+              const blob = await downloadResponse.blob()
+              const url = window.URL.createObjectURL(blob)
+              const videoName = status.fileName || 'video.mp4'
+              setPptVideoDownload({ url, name: videoName })
+              setPptVideoProgress(100)
+              setPptVideoElapsed(Math.floor((Date.now() - startTime) / 1000))
+              setPptVideoPhase('转换完成')
+              setPptVideoStatus('视频已生成，可直接下载')
+              const link = document.createElement('a')
+              link.href = url
+              link.download = videoName
+              document.body.appendChild(link)
+              link.click()
+              link.remove()
+              showToast('PPT 视频已生成')
+              resolve()
+            } else if (status.status === 'failed') {
+              window.clearInterval(pollInterval)
+              reject(new Error(status.error || '转换失败'))
+            }
+          } catch (err) {
+            window.clearInterval(pollInterval)
+            reject(err instanceof Error ? err : new Error('轮询失败'))
+          }
+        }, 2000)
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '视频生成失败'
+      setPptVideoPhase('转换失败')
+      setPptVideoStatus(message)
+      showToast(message, 10000)
+    } finally {
+      window.clearInterval(timer)
+      setPptVideoBusy(false)
     }
   }
 
@@ -1882,6 +2274,8 @@ function App() {
     .replace(/识别为直接生图请求，将使用生图模型[:：]\s*[^。.\n]+[。.]/g, '识别为直接生图请求，开始准备图片生成。')
   const getCleanDocumentTitle = (content: string) => getDocumentTitle(content)
     .replace(/^(?:文章标题|标题|题目|主题)\s*[:：]\s*/, '')
+    .replace(/^(?:这里写|请写)\s*.{0,10}(?:的|的)?(?:文章)?标题[，,：:\s]*/g, '')
+    .replace(/\s*[，,]\s*\d{1,2}[-~]\d{1,2}\s*字.*$/, '')
     .trim()
   const getPreviousUserContent = (messageIndex: number) => {
     for (let i = messageIndex - 1; i >= 0; i -= 1) {
@@ -1901,6 +2295,11 @@ function App() {
       && !isTerminalJobStatus(status)
       && (isMessageGenerating(message) || Boolean(getGeneratingImageTitle(message.content)))
   }
+  const isPptMessage = (message: Message) => {
+    if (message.role !== 'assistant') return false
+    const mode = getMessageMode(message)
+    return mode === 'ppt' || /```(?:ppt-spec|veramedia-ppt)/i.test(message.content) || /PPT_SPEC\s*[:：]/i.test(message.content)
+  }
   const getGeneratingImageDisplayTitle = (message: Message) =>
     getGeneratingImageTitle(message.content) || messageImageTitles[message.id] || '图片'
   const getPageTitle = () => {
@@ -1908,6 +2307,7 @@ function App() {
     if (activePage === 'tasks') return '任务中心'
     if (activePage === 'assets') return '资产库'
     if (activePage === 'images') return '图片资产'
+    if (activePage === 'pptVideo') return 'PPT 转视频'
     return 'AI 工作台'
   }
   const getPageSubtitle = () => {
@@ -1915,6 +2315,7 @@ function App() {
     if (activePage === 'tasks') return '追踪生成进度、失败原因和历史结果。'
     if (activePage === 'assets') return '沉淀文章资产，方便复用与继续编辑。'
     if (activePage === 'images') return '集中管理生成图片、配图和可复用视觉素材。'
+    if (activePage === 'pptVideo') return '上传 PPT，读取备注生成演讲音频，并转换为可下载视频。'
     return '问答、写作、配图和图片生成，都可以在这里完成。'
   }
   const jobStatusLabels: Record<GenerationJobSummary['status'], string> = {
@@ -2308,6 +2709,262 @@ function App() {
     const copied = await copyText(item.prompt.trim())
     showToast(copied ? '提示词已复制' : '当前浏览器不支持直接复制')
   }
+  const selectPptVideoFile = async (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+    const extension = file.name.slice(file.name.lastIndexOf('.')).toLowerCase()
+    if (extension !== '.ppt' && extension !== '.pptx') {
+      showToast('请选择 PPT 或 PPTX 文件')
+      return
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      showToast('PPT 文件不能超过 100MB')
+      return
+    }
+
+    setPptVideoFile(file)
+    setPptVideoSlides([])
+    setPptVideoPreviewId(null)
+    setPptVideoEncoder(null)
+    setPptVideoPreviewBusy(true)
+    setPptVideoProgress(0)
+    setPptVideoPhase('')
+    setPptVideoDownload((current) => {
+      if (current) window.URL.revokeObjectURL(current.url)
+      return null
+    })
+    setPptVideoStatus('正在上传 PPT 文件...')
+    setPptVideoElapsed(0)
+
+    const uploadStart = Date.now()
+    const uploadTimer = window.setInterval(() => setPptVideoElapsed(Math.floor((Date.now() - uploadStart) / 1000)), 1000)
+
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      setPptVideoProgress(5)
+      const response = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/preview`, {
+        method: 'POST',
+        body: form,
+      })
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'PPT 预览失败'))
+      }
+
+      const { taskId } = await response.json() as { taskId: string }
+      setPptVideoPhase('读取备注')
+      setPptVideoStatus('正在读取 PPT 备注并渲染幻灯片...')
+      setPptVideoProgress(10)
+
+      // Poll task status (same pattern as video generation)
+      await new Promise<void>((resolve, reject) => {
+        const pollInterval = window.setInterval(async () => {
+          try {
+            const statusResponse = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/${taskId}/status`)
+            if (!statusResponse.ok) return
+            const status = await statusResponse.json() as {
+              status: string
+              stage: string
+              progress: number
+              slideIndex: number
+              slideTotal: number
+              error?: string
+              previewId?: string
+              previewSlides?: PptVideoSlide[]
+            }
+
+            setPptVideoPhase(status.stage || '处理中')
+            setPptVideoProgress(status.progress)
+            const slideInfo = status.slideTotal > 0 ? ` (${status.slideTotal} 页)` : ''
+            setPptVideoStatus(`${status.stage || '处理中'}${slideInfo}`)
+
+            if (status.status === 'completed') {
+              window.clearInterval(pollInterval)
+              const slides = status.previewSlides || []
+              setPptVideoSlides(slides)
+              setPptVideoPreviewId(status.previewId || null)
+              const elapsed = Math.floor((Date.now() - uploadStart) / 1000)
+              setPptVideoStatus(`已加载 ${slides.length} 页 (${elapsed}s)`)
+              setPptVideoProgress(100)
+              setPptVideoPhase('解析完成')
+              showToast('PPT 已加载')
+              resolve()
+            } else if (status.status === 'failed') {
+              window.clearInterval(pollInterval)
+              reject(new Error(status.error || '预览解析失败'))
+            }
+          } catch {
+            // transient error, keep polling
+          }
+        }, 1500)
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'PPT 预览失败'
+      const title = file.name.replace(/\.[^.]+$/, '') || 'PPT 已选择'
+      setPptVideoSlides([{
+        index: 1,
+        title,
+        notes: `未能自动读取备注。可以在这里手动填写旁白，或留空生成静音视频。\n预览诊断：${message}`,
+      }])
+      setPptVideoStatus('预览读取失败，已切换为基础模式；仍可继续转换或手动填写备注。')
+      showToast('预览读取失败，已切换为基础模式', 6000)
+    } finally {
+      window.clearInterval(uploadTimer)
+      setPptVideoElapsed(0)
+      setPptVideoPreviewBusy(false)
+      setPptVideoProgress((current) => current === 100 ? current : 0)
+    }
+  }
+  const updatePptVideoSlideNotes = (index: number, notes: string) => {
+    setPptVideoSlides((current) => current.map((slide) => slide.index === index ? { ...slide, notes } : slide))
+  }
+
+  const updatePptVideoSetting = <K extends keyof PptVideoSettings>(key: K, value: PptVideoSettings[K]) => {
+    setPptVideoSettings((current) => ({ ...current, [key]: value }))
+  }
+  const playVoiceSample = async () => {
+    if (voiceSampleRef.current) {
+      voiceSampleRef.current.pause()
+      voiceSampleRef.current = null
+      setVoiceSamplePlaying(false)
+    }
+    try {
+      setVoiceSamplePlaying(true)
+      const speed = pptVideoSettings.speed.replace('x', '')
+      const rate = speed === '0.75' ? '-25%' : speed === '1.25' ? '+25%' : speed === '1.5' ? '+50%' : '+0%'
+      const url = `${API_BASE}/api/conversations/ppt-video/voice-sample?voice=${encodeURIComponent(pptVideoSettings.voice)}&speed=${encodeURIComponent(rate)}`
+      const audio = new Audio(url)
+      voiceSampleRef.current = audio
+      audio.onended = () => { setVoiceSamplePlaying(false); voiceSampleRef.current = null }
+      audio.onerror = () => { setVoiceSamplePlaying(false); voiceSampleRef.current = null }
+      await audio.play()
+    } catch {
+      setVoiceSamplePlaying(false)
+    }
+  }
+  const convertPptToVideo = async () => {
+    const file = pptVideoFile
+    if (!file) {
+      showToast('请先选择 PPT 文件')
+      return
+    }
+
+    setPptVideoBusy(true)
+    setPptVideoProgress(5)
+    setPptVideoPhase('提交转换任务')
+    setPptVideoElapsed(0)
+    setPptVideoStatus('正在上传文件并提交转换任务...')
+    setPptVideoEncoder(null)
+    setPptVideoDownload((current) => {
+      if (current) window.URL.revokeObjectURL(current.url)
+      return null
+    })
+
+    const convertStart = Date.now()
+    const convertTimer = window.setInterval(() => setPptVideoElapsed(Math.floor((Date.now() - convertStart) / 1000)), 1000)
+
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('secondsPerSlide', pptVideoSettings.secondsPerSlide)
+      form.append('voice', pptVideoSettings.voice)
+      form.append('speed', pptVideoSettings.speed.replace('x', ''))
+      form.append('resolution', pptVideoSettings.resolution)
+      form.append('volume', String(pptVideoSettings.volume))
+      form.append('notesJson', JSON.stringify(Object.fromEntries(pptVideoSlides.map((slide) => [slide.index, slide.notes]))))
+      if (pptVideoPreviewId) form.append('previewId', pptVideoPreviewId)
+      if (pptVideoBgmFile) form.append('bgm', pptVideoBgmFile)
+
+      setPptVideoProgress(10)
+      const submitResponse = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video`, {
+        method: 'POST',
+        body: form,
+      })
+      if (!submitResponse.ok) {
+        throw new Error(await readErrorMessage(submitResponse, '提交转换任务失败'))
+      }
+
+      const { taskId } = await submitResponse.json() as { taskId: string }
+      setPptVideoPhase('排队中')
+      setPptVideoStatus('任务已提交，正在等待处理...')
+      setPptVideoProgress(12)
+
+      // Poll task status every 2 seconds
+      await new Promise<void>((resolve, reject) => {
+        const pollInterval = window.setInterval(async () => {
+          try {
+            const statusResponse = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/${taskId}/status`)
+            if (!statusResponse.ok) {
+              window.clearInterval(pollInterval)
+              reject(new Error('获取任务状态失败'))
+              return
+            }
+            const status = await statusResponse.json() as {
+              status: string
+              stage: string
+              progress: number
+              slideIndex: number
+              slideTotal: number
+              error?: string
+              fileName?: string
+              videoEncoder?: string
+              videoEncoderMode?: string
+              videoEncoderLabel?: string
+              videoEncoderDevice?: string
+            }
+
+            setPptVideoPhase(status.stage || '处理中')
+            setPptVideoProgress(status.progress)
+            setPptVideoEncoder(readPptVideoEncoder(status))
+            const slideInfo = status.slideTotal > 0 ? ` (${status.slideIndex}/${status.slideTotal})` : ''
+            setPptVideoStatus(`${status.stage || '处理中'}${slideInfo}`)
+
+            if (status.status === 'completed') {
+              window.clearInterval(pollInterval)
+              // Download the video
+              const downloadResponse = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/${taskId}/download`)
+              if (!downloadResponse.ok) {
+                reject(new Error('下载视频失败'))
+                return
+              }
+              const blob = await downloadResponse.blob()
+              const url = window.URL.createObjectURL(blob)
+              const title = file.name.replace(/\.[^.]+$/, '').replace(/[\\/:*?"<>|""«»]+/g, '').slice(0, 48) || 'PPT视频'
+              const videoName = status.fileName || `${title}.mp4`
+              setPptVideoDownload({ url, name: videoName })
+              setPptVideoElapsed(Math.floor((Date.now() - convertStart) / 1000))
+              setPptVideoProgress(100)
+              setPptVideoPhase('转换完成')
+              setPptVideoStatus('视频已生成，可直接下载')
+              const link = document.createElement('a')
+              link.href = url
+              link.download = videoName
+              document.body.appendChild(link)
+              link.click()
+              link.remove()
+              showToast('PPT 视频已生成')
+              resolve()
+            } else if (status.status === 'failed') {
+              window.clearInterval(pollInterval)
+              reject(new Error(status.error || '转换失败'))
+            }
+          } catch (err) {
+            // Don't stop polling on transient errors
+          }
+        }, 2000)
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'PPT 转视频失败'
+      setPptVideoPhase('转换失败')
+      setPptVideoStatus(message)
+      showToast(message, 10000)
+    } finally {
+      window.clearInterval(convertTimer)
+      setPptVideoBusy(false)
+      setPptVideoProgress((current) => current === 100 ? current : 0)
+    }
+  }
   const changeJobStatusFilter = (status: string) => {
     setJobStatusFilter(status)
     void loadJobs(status)
@@ -2402,9 +3059,19 @@ function App() {
     })
   }
 
-  const reportMessage = () => {
+  const reportMessage = async (message: Message) => {
     setOpenMessageMenuId(null)
-    showToast('已标记反馈，后续会接入后台反馈记录')
+    const cid = conversationIdRef.current
+    if (!cid) return
+    try {
+      await request(`/api/conversations/${cid}/messages/${message.id}/feedback`, {
+        method: 'POST',
+        body: JSON.stringify({ type: 'report', detail: '用户在消息菜单点击反馈与举报。' }),
+      })
+      showToast('反馈已记录')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '反馈提交失败')
+    }
   }
   const [copyFeedback, setCopyFeedback] = useState('')
   const [copyTitleFeedback, setCopyTitleFeedback] = useState('')
@@ -2823,7 +3490,7 @@ function App() {
   }
   const downloadPreviewImage = async (src: string, alt?: string) => {
     const imageUrl = new URL(src, window.location.href).href
-    const safeName = (alt || 'veramedia-image').replace(/[\\/:*?"<>|]+/g, '-').slice(0, 40)
+    const safeName = (alt || 'veramedia-image').replace(/[\\/:*?"<>|""«»]+/g, '-').slice(0, 40)
     try {
       const response = await fetch(imageUrl)
       if (!response.ok) throw new Error(response.statusText)
@@ -2924,26 +3591,17 @@ function App() {
     return sources.length || content.split('\n').filter((line) => line.trim()).length
   }
 
-  const renderReferencePanel = (message: Message, referenceContent: string) => {
+  const renderReferencePopover = (referenceContent: string) => {
     const content = referenceContent.trim()
     if (!content) return null
     const sources = parseReferenceSources(content)
-    const isOpen = openReferenceMessageIds.has(message.id)
 
     return (
-      <details className="article-reference-panel" open={isOpen} onToggle={(event) => {
-        const open = event.currentTarget.open
-        setOpenReferenceMessageIds((current) => {
-          const next = new Set(current)
-          if (open) next.add(message.id)
-          else next.delete(message.id)
-          return next
-        })
-      }}>
-        <summary>
+      <div className="article-reference-popover">
+        <div className="article-reference-popover-head">
           <span>参考资料</span>
           {sources.length > 0 && <small>{sources.length} 条</small>}
-        </summary>
+        </div>
         {sources.length > 0 ? (
           <div className="reference-source-list">
             {sources.map((source, index) => (
@@ -2960,12 +3618,147 @@ function App() {
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={chatMarkdownComponents}>{content}</ReactMarkdown>
           </div>
         )}
-      </details>
+      </div>
+    )
+  }
+  const extractPptSpec = (content: string): { spec: PptSpec | null; cleaned: string } => {
+    const candidates: Array<{ raw: string; json: string }> = []
+    const fenced = /```(?:ppt-spec|veramedia-ppt|json)?[^\n`]*\n?([\s\S]*?)```/gi
+    let match: RegExpExecArray | null
+    while ((match = fenced.exec(content))) {
+      candidates.push({ raw: match[0], json: match[1].trim() })
+    }
+
+    const marker = content.match(/PPT_SPEC\s*[:：]\s*(\{[\s\S]*\})/i)
+    if (marker) candidates.push({ raw: marker[0], json: marker[1].trim() })
+    const jsonStart = content.indexOf('{')
+    const jsonEnd = content.lastIndexOf('}')
+    if (jsonStart >= 0 && jsonEnd > jsonStart) {
+      candidates.push({ raw: content.slice(jsonStart, jsonEnd + 1), json: content.slice(jsonStart, jsonEnd + 1).trim() })
+    }
+
+    for (const candidate of candidates) {
+      try {
+        const parsed = JSON.parse(candidate.json) as PptSpec
+        if (Array.isArray(parsed.slides) && parsed.slides.length > 0) {
+          return { spec: parsed, cleaned: content.replace(candidate.raw, '').trim() }
+        }
+      } catch {
+        // Ignore non-spec JSON blocks.
+      }
+    }
+
+    return { spec: null, cleaned: content }
+  }
+
+  const renderPptSpecCard = (message: Message, spec: PptSpec, cleaned: string) => {
+    const slides = spec.slides || []
+    const previewSlides = slides.slice(0, 6)
+    const asString = (v: unknown) => typeof v === 'string' ? v.trim() : ''
+    const title = asString(spec.title) || getCleanDocumentTitle(message.content) || 'PPT 制作方案'
+    const subtitle = asString(spec.subtitle)
+    const audience = asString(spec.audience)
+    const theme = asString(spec.theme)
+    const layoutLabels: Record<string, string> = {
+      cover: '封面',
+      agenda: '目录',
+      section: '章节',
+      summary: '总结',
+      'data-card': '数据卡',
+      process: '流程',
+      timeline: '时间线',
+      'two-column': '双栏',
+      'title-content': '内容页',
+    }
+    const getLayoutLabel = (layout?: unknown) => {
+      const value = (typeof layout === 'string' ? layout : 'title-content').toLowerCase()
+      const key = Object.keys(layoutLabels).find((item) => value.includes(item))
+      return key ? layoutLabels[key] : '内容页'
+    }
+
+    return (
+      <div className="ppt-spec-result">
+        {cleaned && !/^已基于|^基于|^下面是|^以下是/.test(cleaned) && <p className="ppt-spec-note">{cleaned}</p>}
+        <section className="ppt-spec-card">
+          <div className="ppt-spec-head">
+            <span><Presentation size={16} /> PPT 方案</span>
+            <strong>{title}</strong>
+            {subtitle && <p>{subtitle}</p>}
+            <div>
+              <em>{slides.length} 页</em>
+              {audience && <em>{audience}</em>}
+              {theme && <em>{theme}</em>}
+              <em>{slides.filter((slide) => asString(slide.notes || slide.narration)).length} 页备注</em>
+            </div>
+          </div>
+          <div className="ppt-spec-slide-grid">
+            {previewSlides.map((slide, index) => {
+              const bullets = slide.bullets || slide.points || []
+              return (
+                <article className="ppt-spec-slide" key={`${slide.title || 'slide'}-${index}`}>
+                  <span>{index + 1}</span>
+                  <div className="ppt-spec-slide-title">
+                    <strong>{slide.title || `第 ${index + 1} 页`}</strong>
+                    <em>{getLayoutLabel(slide.layout)}</em>
+                  </div>
+                  {asString(slide.subtitle) && <p>{asString(slide.subtitle)}</p>}
+                  {bullets.length > 0 && <ul>{bullets.slice(0, 3).map((item) => <li key={item}>{item}</li>)}</ul>}
+                </article>
+              )
+            })}
+          </div>
+          {slides.length > previewSlides.length && <p className="ppt-spec-more">还有 {slides.length - previewSlides.length} 页已规划，可直接导出完整 PPT。</p>}
+          <div className="ppt-spec-actions">
+            <button type="button" onClick={() => downloadMessageExport(message, 'pptx')}><Download size={14} />下载 PPT</button>
+            <button type="button" onClick={() => downloadMessageExport(message, 'mp4')}><Video size={14} />生成视频</button>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
+  const renderPptGeneratingCard = (message: Message) => {
+    const content = stripReferenceSections(stripImagePrompts(message.content)).trim()
+    const titleMatch = content.match(/"title"\s*:\s*"([^"]{2,80})"/)
+    const themeMatch = content.match(/"theme"\s*:\s*"([^"]{2,40})"/)
+    const slideMatches = content.match(/"layout"\s*:/g)
+    const notesMatches = content.match(/"notes"\s*:/g)
+    const slideCount = slideMatches?.length || 0
+    const notesCount = notesMatches?.length || 0
+    const title = titleMatch?.[1] || getCleanDocumentTitle(content) || '正在制作 PPT'
+    const theme = themeMatch?.[1] || 'AI 视觉方案'
+
+    return (
+      <div className="ppt-spec-result">
+        <section className="ppt-spec-card ppt-spec-generating">
+          <div className="ppt-spec-head">
+            <span><Presentation size={16} /> PPT 制作中</span>
+            <strong>{title}</strong>
+            <p>正在规划页面结构、视觉版式、图表表达和演讲备注，完成后会自动切换为可下载的 PPT 方案卡片。</p>
+            <div>
+              <em>{theme}</em>
+              <em>{slideCount > 0 ? `已规划 ${slideCount} 页` : '规划页面中'}</em>
+              <em>{notesCount > 0 ? `${notesCount} 页备注` : '生成备注中'}</em>
+            </div>
+          </div>
+          <div className="ppt-generating-steps">
+            {['提炼内容结构', '设计页面版式', '生成视觉说明', '补充演讲备注'].map((item, index) => (
+              <div className="ppt-generating-step" key={item}>
+                <span>{index + 1}</span>
+                <strong>{item}</strong>
+                <i />
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     )
   }
 
   const renderTextMessage = (message: Message) => {
-    const displayContent = stripReferenceSections(stripImagePrompts(message.content)).trim()
+    const rawDisplayContent = stripReferenceSections(stripImagePrompts(message.content)).trim()
+    const pptSpecResult = message.role === 'assistant' ? extractPptSpec(rawDisplayContent) : { spec: null, cleaned: rawDisplayContent }
+    const displayContent = pptSpecResult.spec ? pptSpecResult.cleaned : rawDisplayContent
     const referenceContent = extractReferenceSection(message.content)
 
     return (
@@ -2986,6 +3779,10 @@ function App() {
                 </span>
               </div>
             </div>
+          ) : pptSpecResult.spec ? (
+            renderPptSpecCard(message, pptSpecResult.spec, displayContent)
+          ) : isPptMessage(message) && isMessageGenerating(message) ? (
+            renderPptGeneratingCard(message)
           ) : displayContent ? (
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={chatMarkdownComponents}>{displayContent}</ReactMarkdown>
           ) : isMessageGenerating(message) ? (
@@ -2998,7 +3795,6 @@ function App() {
             <span className="empty-message">生成结果正在同步，请稍候。</span>
           )}
         </div>
-        {message.role === 'assistant' && !isGeneratingImageMessage(message) && !isMessageGenerating(message) && renderReferencePanel(message, referenceContent)}
       </>
     )
   }
@@ -3009,6 +3805,8 @@ function App() {
     const referenceCount = isAssistant ? getReferenceSourceCount(extractReferenceSection(message.content)) : 0
     const isReferenceOpen = openReferenceMessageIds.has(message.id)
     const isSpeaking = speakingMessageId === message.id
+    const hasPptSpec = isAssistant && Boolean(extractPptSpec(stripReferenceSections(stripImagePrompts(message.content)).trim()).spec)
+    const showAssistantMore = isAssistant && !hasPptSpec
 
     return (
       <div className="message-action-row" aria-label="消息操作">
@@ -3030,17 +3828,32 @@ function App() {
             </button>
           </>
         )}
+        {hasPptSpec && (
+          <>
+            <button className="pill-action" type="button" title="下载 PPT" onClick={() => void downloadMessageExport(message, 'pptx')}>
+              <Presentation size={15} />
+              下载
+            </button>
+            <button className="pill-action" type="button" title="生成视频" onClick={() => void downloadMessageExport(message, 'mp4')}>
+              <Video size={15} />
+              视频
+            </button>
+          </>
+        )}
         {!isAssistant && (
           <button type="button" title="重新生成" onClick={() => void retryFromMessage(message)} disabled={isStreaming}>
             <RotateCcw size={16} />
           </button>
         )}
         {isAssistant && referenceCount > 0 && (
-          <button className={isReferenceOpen ? 'reference-toggle active' : 'reference-toggle'} type="button" onClick={() => toggleReferencePanel(message)} title={isReferenceOpen ? '收起参考资料' : '展开参考资料'}>
-            参考 {referenceCount} 篇资料
-          </button>
+          <div className="reference-action-wrap">
+            <button className={isReferenceOpen ? 'reference-toggle active' : 'reference-toggle'} type="button" onClick={() => toggleReferencePanel(message)} title={isReferenceOpen ? '收起参考资料' : '展开参考资料'}>
+              参考 {referenceCount} 篇资料
+            </button>
+            {isReferenceOpen && renderReferencePopover(extractReferenceSection(message.content))}
+          </div>
         )}
-        {isAssistant && (
+        {showAssistantMore && (
           <div className="message-more-wrap">
             <button className={openMessageMenuId === message.id ? 'active' : ''} type="button" title="更多" onClick={() => setOpenMessageMenuId((current) => current === message.id ? null : message.id)}>
               <MoreHorizontal size={16} />
@@ -3071,7 +3884,7 @@ function App() {
                   <MessageSquarePlus size={16} />
                   基于此追问
                 </button>
-                <button type="button" onClick={reportMessage}>
+                <button type="button" onClick={() => void reportMessage(message)}>
                   <Flag size={16} />
                   反馈与举报
                 </button>
@@ -3155,6 +3968,10 @@ function App() {
         <button className={activePage === 'images' ? 'new-chat active' : 'new-chat'} onClick={openImageLibrary}>
           <ImagePlus size={18} />
           图片资产
+        </button>
+        <button className={activePage === 'pptVideo' ? 'new-chat active' : 'new-chat'} onClick={openPptVideoPage}>
+          <Video size={18} />
+          PPT 转视频
         </button>
         <div className="sidebar-section-title">历史对话</div>
         <div className="conversation-list">
@@ -3503,6 +4320,10 @@ function App() {
             {activePage === 'images' ? <ArrowLeft size={18} /> : <ImagePlus size={18} />}
             {activePage === 'images' ? '返回前台' : '图片'}
           </button>
+          <button className={activePage === 'pptVideo' ? 'top-settings mobile-only-nav-action active' : 'top-settings mobile-only-nav-action'} type="button" onClick={activePage === 'pptVideo' ? goToChat : openPptVideoPage}>
+            {activePage === 'pptVideo' ? <ArrowLeft size={18} /> : <Video size={18} />}
+            {activePage === 'pptVideo' ? '返回前台' : '转视频'}
+          </button>
           {user.isAdmin && (
             <button className={activePage === 'admin' ? 'top-settings active top-return' : 'top-settings'} type="button" onClick={() => activePage === 'admin' ? goToChat() : openAdminPage()}>
               {activePage === 'admin' ? <ArrowLeft size={18} /> : <Settings size={18} />}
@@ -3676,6 +4497,189 @@ function App() {
                 </div>
               </>
             )}
+          </div>
+        ) : activePage === 'pptVideo' ? (
+          <div className="ppt-video-page">
+            <section className="ppt-video-studio" aria-label="PPT 转视频">
+              <div className="ppt-video-grid">
+                <div className="ppt-video-panel">
+                  <h3><UploadCloud size={15} /> 文件选择</h3>
+                  <div className="ppt-file-row">
+                    <label className={pptVideoBusy || pptVideoPreviewBusy ? 'ppt-file-button disabled' : 'ppt-file-button'}>
+                      选择 PPT
+                      <input
+                        type="file"
+                        accept=".ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                        disabled={pptVideoBusy || pptVideoPreviewBusy}
+                        onChange={(event) => {
+                          void selectPptVideoFile(event.target.files)
+                          event.currentTarget.value = ''
+                        }}
+                      />
+                    </label>
+                    <span title={pptVideoFile?.name}>{pptVideoFile ? pptVideoFile.name : '未选择文件'}</span>
+                  </div>
+                </div>
+
+                <div className="ppt-video-panel">
+                  <h3><Volume2 size={15} /> 语音设置</h3>
+                  <label>
+                    音色
+                    <div className="ppt-voice-row">
+                      <select value={pptVideoSettings.voice} onChange={(event) => updatePptVideoSetting('voice', event.target.value)}>
+                        {pptVideoVoiceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                      </select>
+                      <button type="button" className={`ppt-voice-sample${voiceSamplePlaying ? ' playing' : ''}`} onClick={() => void playVoiceSample()} title="试听音色">
+                        <Play size={13} />
+                      </button>
+                    </div>
+                  </label>
+                  <label>
+                    语速
+                    <select value={pptVideoSettings.speed} onChange={(event) => updatePptVideoSetting('speed', event.target.value)}>
+                      {pptVideoSpeedOptions.map((item) => <option key={item} value={item}>{item}{item === '1.0x' ? '（正常）' : ''}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="ppt-video-panel">
+                  <h3><Music size={15} /> 音频设置</h3>
+                  <div className="ppt-bgm-row">
+                    <span>BGM</span>
+                    <strong title={pptVideoBgmFile?.name}>{pptVideoBgmFile?.name || '未选择'}</strong>
+                    <label className="ppt-bgm-button">
+                      选择
+                      <input
+                        type="file"
+                        accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg"
+                        disabled={pptVideoBusy}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0] || null
+                          setPptVideoBgmFile(file)
+                          updatePptVideoSetting('bgmName', file?.name || '')
+                          event.currentTarget.value = ''
+                        }}
+                      />
+                    </label>
+                    <button type="button" disabled={!pptVideoBgmFile || pptVideoBusy} onClick={() => {
+                      setPptVideoBgmFile(null)
+                      updatePptVideoSetting('bgmName', '')
+                    }}>清除</button>
+                  </div>
+                  <label className="ppt-range-row">
+                    音量
+                    <input type="range" min="0" max="100" value={pptVideoSettings.volume} onChange={(event) => updatePptVideoSetting('volume', Number(event.target.value))} />
+                    <span>{pptVideoSettings.volume}%</span>
+                  </label>
+                </div>
+
+                <div className="ppt-video-panel">
+                  <h3><Download size={15} /> 输出设置</h3>
+                  <label>
+                    分辨率
+                    <select value={pptVideoSettings.resolution} onChange={(event) => updatePptVideoSetting('resolution', event.target.value)}>
+                      {pptVideoResolutionOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    无备注页时长
+                    <select value={pptVideoSettings.secondsPerSlide} onChange={(event) => updatePptVideoSetting('secondsPerSlide', event.target.value)}>
+                      <option value="3">3 秒</option>
+                      <option value="5">5 秒</option>
+                      <option value="8">8 秒</option>
+                      <option value="10">10 秒</option>
+                    </select>
+                  </label>
+                  <button className="ppt-convert-button" type="button" disabled={!pptVideoFile || pptVideoBusy || pptVideoPreviewBusy} onClick={() => void convertPptToVideo()}>
+                    {pptVideoBusy ? <span className="ppt-button-spinner" aria-hidden="true" /> : <Video size={15} />}
+                    {pptVideoBusy ? '正在转换' : '开始转换'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="ppt-video-preview">
+                <div className="ppt-video-preview-head">
+                  <strong>幻灯片预览 · 演讲稿编辑</strong>
+                  <span>可直接编辑每页备注，转换时会使用这里的文字生成语音</span>
+                </div>
+                {pptVideoSlides.length === 0 ? (
+                  <div className={pptVideoPreviewBusy ? 'ppt-video-empty is-loading' : 'ppt-video-empty'}>
+                    {pptVideoPreviewBusy && <span className="ppt-video-loader" aria-hidden="true" />}
+                    <strong>{pptVideoPreviewBusy ? '正在读取 PPT…' : '等待选择 PPT'}</strong>
+                    <p>{pptVideoStatus || '请选择 PPT 文件，加载后这里会显示各页标题与完整演讲稿内容。'}</p>
+                  </div>
+                ) : (
+                  <div className="ppt-viewer-list">
+                    <div className="ppt-viewer-list-head">
+                      <strong>共 {pptVideoSlides.length} 页</strong>
+                      {pptVideoStatus && <span className="ppt-viewer-parse-time">{pptVideoStatus.replace(/^已加载 \d+ 页\s*/, '')}</span>}
+                    </div>
+                    {pptVideoSlides.map((slide) => (
+                      <div className="ppt-viewer-row" key={slide.index}>
+                        <div className="ppt-viewer-row-img">
+                          {pptVideoPreviewId && (
+                            <img
+                              src={`${API_BASE}/api/conversations/ppt-video/preview/${pptVideoPreviewId}/slide/${slide.index}`}
+                              alt={`第 ${slide.index} 页`}
+                              loading="lazy"
+                              onClick={() => setPptVideoLightboxSrc(`${API_BASE}/api/conversations/ppt-video/preview/${pptVideoPreviewId}/slide/${slide.index}`)}
+                            />
+                          )}
+                          <span>{slide.index}</span>
+                        </div>
+                        <div className="ppt-viewer-row-notes">
+                          <strong>{slide.title}</strong>
+                          <textarea
+                            value={slide.notes}
+                            placeholder="这一页没有备注。可在这里补充旁白；留空则生成静音片段。"
+                            onChange={(event) => updatePptVideoSlideNotes(slide.index, event.target.value)}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="ppt-video-progress">
+                <div className="ppt-progress-head">
+                  <div className="ppt-progress-title">
+                    {pptVideoEncoder && (
+                      <div className={`ppt-encoder-badge ${pptVideoEncoder.mode === 'gpu' ? 'gpu' : 'cpu'}`}>
+                        {pptVideoEncoder.mode === 'gpu' ? <Zap size={14} /> : <Cpu size={14} />}
+                        <strong>{pptVideoEncoder.mode === 'gpu' ? 'GPU' : 'CPU'}</strong>
+                      </div>
+                    )}
+                    <strong>{pptVideoProgressTitle}</strong>
+                    {pptVideoProgressMessage && <p>{pptVideoProgressMessage}</p>}
+                  </div>
+                  <div className="ppt-progress-meta">
+                    <div className="ppt-progress-actions">
+                      {pptVideoDownload && (
+                        <a className="ppt-download-link" href={pptVideoDownload.url} download={pptVideoDownload.name}>
+                          <Download size={14} />
+                          下载视频
+                        </a>
+                      )}
+                    </div>
+                    <span>{pptVideoElapsed > 0 && (pptVideoBusy || pptVideoPreviewBusy || pptVideoProgress === 100) ? `${Math.floor(pptVideoElapsed / 60)}:${String(pptVideoElapsed % 60).padStart(2, '0')}` : pptVideoBusy || pptVideoPreviewBusy ? '处理中' : `${pptVideoProgress}%`}</span>
+                  </div>
+                </div>
+                <div className={pptVideoBusy || pptVideoPreviewBusy ? 'ppt-progress-track active' : 'ppt-progress-track'}>
+                  <i style={{ width: `${pptVideoProgress}%` }} />
+                </div>
+              </div>
+            </section>
+
+            {pptVideoLightboxSrc && (
+              <div className="ppt-lightbox" onClick={() => setPptVideoLightboxSrc(null)}>
+                <img src={pptVideoLightboxSrc} alt="幻灯片预览" onClick={(e) => e.stopPropagation()} />
+                <button className="ppt-lightbox-close" onClick={() => setPptVideoLightboxSrc(null)}>
+                  <X size={20} />
+                </button>
+              </div>
+            )}
+
           </div>
         ) : activePage === 'tasks' ? (
           <div className="task-center">
@@ -4128,7 +5132,6 @@ function App() {
                         )}
                       </div>
                     </div>
-                    {!isMessageGenerating(message) && renderReferencePanel(message, extractReferenceSection(message.content))}
                   </>
                 ) : (
                   renderTextMessage(message)
@@ -4161,7 +5164,7 @@ function App() {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleComposerKeyDown}
               onPaste={(event) => void handleComposerPaste(event)}
-              placeholder={agentOptions.capability === 'image' ? '描述你想要的图片' : agentOptions.capability === 'write' ? '输入主题和写作要求' : agentOptions.capability === 'code' ? '输入“@”唤起常用语，或粘贴代码快速提问' : agentOptions.capability === 'translate' ? '输入要翻译的文本' : agentOptions.capability === 'research' ? '输入主题和报告要求' : agentOptions.capability === 'qa' ? '输入题目，或粘贴拖拽题目图片' : agentOptions.capability === 'data' ? '请输入对于上传数据的任何分析处理要求' : agentOptions.capability === 'super' ? '输入问题或任务' : agentOptions.capability === 'ppt' && agentOptions.capabilityParams.pptMode === 'PPT视频' ? '输入视频主题、受众、时长和演讲风格' : agentOptions.capability === 'ppt' ? '输入主题，添加具体要求和参考资料以获得更好效果' : '发消息，粘贴图片，或拖入文件...'}
+              placeholder={agentOptions.capability === 'image' ? '描述你想要的图片' : agentOptions.capability === 'write' ? '输入主题和写作要求' : agentOptions.capability === 'code' ? '输入“@”唤起常用语，或粘贴代码快速提问' : agentOptions.capability === 'translate' ? '输入要翻译的文本' : agentOptions.capability === 'research' ? '输入主题和报告要求' : agentOptions.capability === 'qa' ? '输入题目，或粘贴拖拽题目图片' : agentOptions.capability === 'data' ? '请输入对于上传数据的任何分析处理要求' : agentOptions.capability === 'super' ? '输入问题或任务' : agentOptions.capability === 'ppt' && agentOptions.capabilityParams.pptMode === 'PPT视频' ? '输入视频主题、受众、时长和演讲风格' : agentOptions.capability === 'ppt' ? '输入主题、受众、汇报目标和参考资料，生成可下载的精美 PPT' : '发消息，粘贴图片，或拖入文件...'}
             />
             {attachments.length > 0 && (
               <div className="attachment-row">
@@ -4187,7 +5190,13 @@ function App() {
                     <button
                       className={isToolMenuOpen ? 'capability-button active' : 'capability-button'}
                       type="button"
-                      onClick={() => setIsToolMenuOpen((value) => !value)}
+                      onClick={() => {
+                        setIsThinkingMenuOpen(false)
+                        setThinkingMenuPosition(null)
+                        setOpenToolbarSelect(null)
+                        setToolbarSelectPosition(null)
+                        setIsToolMenuOpen((value) => !value)
+                      }}
                     >
                       <MoreHorizontal size={17} />
                       更多
@@ -4288,11 +5297,6 @@ function App() {
               <button className="primary-button" type="submit">保存配置</button>
               {providerStatus && <p className="hint">{providerStatus}</p>}
             </form>
-
-            <div className="artifact-preview">
-              <div className="panel-title">当前产物</div>
-              <p>第一版会把 Agent 输出直接保存在会话里。下一步可以把标题、正文、配图 prompt 拆成结构化文章和素材库。</p>
-            </div>
           </aside>
         </div>
       )}

@@ -21,6 +21,8 @@
     <PackageReference Include="MailKit" Version="4.16.0" />
     <PackageReference Include="Markdig" Version="0.38.0" />
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.3" />
+    <PackageReference Include="SkiaSharp" Version="3.*" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux" Version="3.*" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
   </ItemGroup>
 
@@ -28,17 +30,10 @@
     <Content Include="..\..\scripts\export-ppt-video.sh" Link="scripts\export-ppt-video.sh" CopyToPublishDirectory="Always" />
   </ItemGroup>
 
-  <Target Name="BuildFrontendAssets" AfterTargets="Build" Condition="'$(SkipFrontendBuild)' != 'true'">
+  <Target Name="BuildFrontendAssets" BeforeTargets="GenerateStaticWebAssetsManifest;ComputeFilesToPublish" Condition="'$(SkipFrontendBuild)' != 'true'">
     <Message Text="Building frontend and syncing files into wwwroot..." Importance="high" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCommand) ci" Condition="!Exists('$(SpaRoot)node_modules')" />
     <Exec WorkingDirectory="$(SpaRoot)" Command="$(NpmCommand) run build" />
-    <ItemGroup>
-      <OldFrontendFiles Include="$(FrontendWwwRoot)assets\**\*.*" />
-      <OldFrontendFiles Include="$(FrontendWwwRoot)index.html" />
-      <OldFrontendFiles Include="$(FrontendWwwRoot)favicon.svg" />
-      <OldFrontendFiles Include="$(FrontendWwwRoot)icons.svg" />
-    </ItemGroup>
-    <Delete Files="@(OldFrontendFiles)" />
     <ItemGroup>
       <FrontendDistFiles Include="$(SpaDist)**\*.*" />
     </ItemGroup>

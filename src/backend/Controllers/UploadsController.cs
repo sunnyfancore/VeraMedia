@@ -68,11 +68,12 @@ public sealed class UploadsController(IWebHostEnvironment environment) : Control
                 await file.CopyToAsync(stream, cancellationToken);
             }
 
+            var url = $"{Request.Scheme}://{Request.Host}/uploads/{safeName}";
             results.Add(new FileUploadResponse(
                 file.FileName,
                 file.ContentType,
                 file.Length,
-                $"/uploads/{safeName}"));
+                url));
         }
 
         return Ok(results);

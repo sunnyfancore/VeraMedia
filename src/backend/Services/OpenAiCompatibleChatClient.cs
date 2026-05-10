@@ -8,7 +8,10 @@ using VeraMedia.Api.Models;
 
 namespace VeraMedia.Api.Services;
 
-public sealed class OpenAiCompatibleChatClient(HttpClient httpClient, IHttpContextAccessor httpContextAccessor) : IAiChatClient
+public sealed class OpenAiCompatibleChatClient(
+    HttpClient httpClient,
+    IHttpContextAccessor httpContextAccessor,
+    IWebHostEnvironment environment) : IAiChatClient
 {
     public async IAsyncEnumerable<string> StreamReplyAsync(
         AiProvider? provider,
@@ -59,7 +62,7 @@ public sealed class OpenAiCompatibleChatClient(HttpClient httpClient, IHttpConte
             ["model"] = model.Name,
             ["stream"] = true,
             ["temperature"] = (double)(options?.Temperature ?? 0.7m),
-            ["messages"] = turns.Select(x => new { role = x.Role, content = x.Content }).ToArray()
+            ["messages"] = turns.Select(BuildChatCompletionMessage).ToArray()
         };
         var reasoningEffort = ResolveReasoningEffort(options);
         if (reasoningEffort is not null)
@@ -108,11 +111,7 @@ public sealed class OpenAiCompatibleChatClient(HttpClient httpClient, IHttpConte
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", provider.ApiKey);
         ApplyClientUserAgent(request);
 
-        var input = turns.Select(x => new
-        {
-            role = x.Role,
-            content = x.Content
-        }).ToArray();
+        var input = turns.Select(BuildResponseInputMessage).ToArray();
 
         var payload = new Dictionary<string, object?>
         {
@@ -178,6 +177,90 @@ public sealed class OpenAiCompatibleChatClient(HttpClient httpClient, IHttpConte
             "expert" => "xhigh",
             _ => null
         };
+    }
+
+    private object BuildChatCompletionMessage(ChatTurn turn)
+    {
+        var images = GetImageAttachments(turn);
+        if (images.Count == 0 || !string.Equals(turn.Role, "user", StringComparison.OrdinalIgnoreCase))
+        {
+            return new { role = turn.Role, content = turn.Content };
+        }
+
+        var content = new List<object> { new { type = "text", text = turn.Content } };
+        content.AddRange(images.Select(x => new
+        {
+            type = "image_url",
+            image_url = new { url = ResolveImageSource(x) }
+        }));
+        return new { role = turn.Role, content };
+    }
+
+    private object BuildResponseInputMessage(ChatTurn turn)
+    {
+        var images = GetImageAttachments(turn);
+        if (images.Count == 0 || !string.Equals(turn.Role, "user", StringComparison.OrdinalIgnoreCase))
+        {
+            return new { role = turn.Role, content = turn.Content };
+        }
+
+        var content = new List<object> { new { type = "input_text", text = turn.Content } };
+        content.AddRange(images.Select(x => new
+        {
+            type = "input_image",
+            image_url = ResolveImageSource(x)
+        }));
+        return new { role = turn.Role, content };
+    }
+
+    private static IReadOnlyList<AttachmentDto> GetImageAttachments(ChatTurn turn) =>
+        turn.Attachments?
+            .Where(x => x.ContentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(x.Url))
+            .Take(4)
+            .ToList() ?? [];
+
+    private string ResolveImageSource(AttachmentDto attachment)
+    {
+        var path = ResolveUploadPath(attachment.Url);
+        if (path is null || !File.Exists(path))
+        {
+            return attachment.Url;
+        }
+
+        try
+        {
+            var bytes = File.ReadAllBytes(path);
+            return $"data:{attachment.ContentType};base64,{Convert.ToBase64String(bytes)}";
+        }
+        catch
+        {
+            return attachment.Url;
+        }
+    }
+
+    private string? ResolveUploadPath(string url)
+    {
+        var pathPart = url;
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            pathPart = uri.AbsolutePath;
+        }
+
+        pathPart = Uri.UnescapeDataString(pathPart).Replace('\\', '/');
+        if (!pathPart.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var fileName = Path.GetFileName(pathPart);
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            return null;
+        }
+
+        var uploadRoot = Path.GetFullPath(Path.Combine(environment.WebRootPath ?? Path.Combine(environment.ContentRootPath, "wwwroot"), "uploads"));
+        var fullPath = Path.GetFullPath(Path.Combine(uploadRoot, fileName));
+        return fullPath.StartsWith(uploadRoot, StringComparison.OrdinalIgnoreCase) ? fullPath : null;
     }
 
     private static string? TryReadChatDelta(string json)

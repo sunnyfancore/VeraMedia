@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using VeraMedia.Api.Contracts;
@@ -9,6 +10,8 @@ namespace VeraMedia.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController(IAuthService authService) : ControllerBase
 {
+    private static readonly ConcurrentDictionary<string, (int Count, DateTime WindowStart)> _emailCodeLimiter = new();
+
     [HttpPost("register")]
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
@@ -38,6 +41,15 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("email-code")]
     public async Task<ActionResult<SendEmailCodeResponse>> SendEmailCode(SendEmailCodeRequest request, CancellationToken cancellationToken)
     {
+        var key = (request.Email ?? "").Trim().ToLowerInvariant();
+        var now = DateTime.UtcNow;
+        var entry = _emailCodeLimiter.GetOrAdd(key, _ => (0, now));
+        if (now - entry.WindowStart > TimeSpan.FromMinutes(5))
+            entry = (0, now);
+        if (entry.Count >= 5)
+            return StatusCode(429, new { message = "请求过于频繁，请 5 分钟后再试。" });
+        _emailCodeLimiter[key] = (entry.Count + 1, entry.WindowStart);
+
         return Ok(await authService.SendEmailCodeAsync(request, cancellationToken));
     }
 

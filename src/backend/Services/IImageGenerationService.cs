@@ -28,6 +28,7 @@ public interface IImageGenerationService
         AiModel? imageModel,
         string title,
         string articleMarkdown,
+        AgentOptionsDto? options,
         CancellationToken cancellationToken);
 
     IAsyncEnumerable<GeneratedArticleImage> GenerateSingleArticleImageStreamAsync(
@@ -35,6 +36,7 @@ public interface IImageGenerationService
         AiModel? imageModel,
         string title,
         string articleMarkdown,
+        AgentOptionsDto? options,
         CancellationToken cancellationToken);
 
     Task<GeneratedArticleImage> GenerateFromPromptAsync(
@@ -42,6 +44,7 @@ public interface IImageGenerationService
         AiModel? imageModel,
         string title,
         string prompt,
+        AgentOptionsDto? options,
         CancellationToken cancellationToken);
 
     IAsyncEnumerable<GeneratedArticleImage> GenerateFromPromptStreamAsync(
@@ -49,5 +52,6 @@ public interface IImageGenerationService
         AiModel? imageModel,
         string title,
         string prompt,
+        AgentOptionsDto? options,
         CancellationToken cancellationToken);
 }

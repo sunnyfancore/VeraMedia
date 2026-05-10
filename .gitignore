@@ -20,6 +20,7 @@ appsettings.Production.json
 
 ## Runtime data
 AppData/
+uploads/
 src/backend/wwwroot/assets/
 src/backend/wwwroot/index.html
 src/backend/wwwroot/favicon.svg

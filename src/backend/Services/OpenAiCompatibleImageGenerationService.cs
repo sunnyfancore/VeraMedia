@@ -65,7 +65,7 @@ public sealed class OpenAiCompatibleImageGenerationService(
 
         foreach (var item in BuildImagePrompts(userRequest, articleMarkdown, options))
         {
-            await foreach (var image in GeneratePromptImageStreamWithErrorsAsync(provider, imageModel, item.Title, item.Prompt, cancellationToken))
+            await foreach (var image in GeneratePromptImageStreamWithErrorsAsync(provider, imageModel, item.Title, item.Prompt, options, cancellationToken))
             {
                 yield return image;
             }
@@ -77,10 +77,11 @@ public sealed class OpenAiCompatibleImageGenerationService(
         AiModel? imageModel,
         string title,
         string articleMarkdown,
+        AgentOptionsDto? options,
         CancellationToken cancellationToken)
     {
         return await GetFinalImageAsync(
-            GenerateSingleArticleImageStreamAsync(provider, imageModel, title, articleMarkdown, cancellationToken),
+            GenerateSingleArticleImageStreamAsync(provider, imageModel, title, articleMarkdown, options, cancellationToken),
             new GeneratedArticleImage(title, "", null, "生图接口没有返回结果。"),
             cancellationToken);
     }
@@ -90,6 +91,7 @@ public sealed class OpenAiCompatibleImageGenerationService(
         AiModel? imageModel,
         string title,
         string articleMarkdown,
+        AgentOptionsDto? options,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         if (provider is null || imageModel is null || string.IsNullOrWhiteSpace(provider.ApiKey))
@@ -99,7 +101,7 @@ public sealed class OpenAiCompatibleImageGenerationService(
         }
 
         var prompt = BuildSingleArticleImagePrompt(title, articleMarkdown);
-        await foreach (var image in GeneratePromptImageStreamWithErrorsAsync(provider, imageModel, title, prompt, cancellationToken))
+        await foreach (var image in GeneratePromptImageStreamWithErrorsAsync(provider, imageModel, title, prompt, options, cancellationToken))
         {
             yield return image;
         }
@@ -110,10 +112,11 @@ public sealed class OpenAiCompatibleImageGenerationService(
         AiModel? imageModel,
         string title,
         string prompt,
+        AgentOptionsDto? options,
         CancellationToken cancellationToken)
     {
         return await GetFinalImageAsync(
-            GenerateFromPromptStreamAsync(provider, imageModel, title, prompt, cancellationToken),
+            GenerateFromPromptStreamAsync(provider, imageModel, title, prompt, options, cancellationToken),
             new GeneratedArticleImage(title, prompt, null, "生图接口没有返回结果。"),
             cancellationToken);
     }
@@ -123,6 +126,7 @@ public sealed class OpenAiCompatibleImageGenerationService(
         AiModel? imageModel,
         string title,
         string prompt,
+        AgentOptionsDto? options,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         if (provider is null || imageModel is null || string.IsNullOrWhiteSpace(provider.ApiKey))
@@ -137,7 +141,7 @@ public sealed class OpenAiCompatibleImageGenerationService(
             yield break;
         }
 
-        await foreach (var image in GeneratePromptImageStreamWithErrorsAsync(provider, imageModel, title, prompt, cancellationToken))
+        await foreach (var image in GeneratePromptImageStreamWithErrorsAsync(provider, imageModel, title, prompt, options, cancellationToken))
         {
             yield return image;
         }
@@ -162,11 +166,12 @@ public sealed class OpenAiCompatibleImageGenerationService(
         AiModel imageModel,
         string title,
         string prompt,
+        AgentOptionsDto? options,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(ImageRequestTimeout);
-        var enumerator = GenerateOneStreamAsync(provider, imageModel, title, prompt, timeout.Token)
+        var enumerator = GenerateOneStreamAsync(provider, imageModel, title, prompt, options, timeout.Token)
             .GetAsyncEnumerator(cancellationToken);
         Exception? error = null;
         try
@@ -216,6 +221,7 @@ public sealed class OpenAiCompatibleImageGenerationService(
         AiModel imageModel,
         string title,
         string prompt,
+        AgentOptionsDto? options,
         [EnumeratorCancellation] CancellationToken cancellationToken)
     {
         var endpoint = provider.BaseUrl.TrimEnd('/') + ImageGenerationPath;
@@ -228,7 +234,7 @@ public sealed class OpenAiCompatibleImageGenerationService(
             model = imageModel.Name,
             prompt,
             n = 1,
-            size = DefaultImageSize,
+            size = BuildImageSize(options),
             stream = true,
             partial_images = StreamPartialImageCount
         });
@@ -438,6 +444,17 @@ public sealed class OpenAiCompatibleImageGenerationService(
                   """;
             return (title, prompt);
         }).ToList();
+    }
+
+    private static string BuildImageSize(AgentOptionsDto? options)
+    {
+        var ratio = options?.ImageRatio?.Trim();
+        return ratio switch
+        {
+            "3:4" or "9:16" => "1024x1536",
+            "4:3" or "16:9" => "1536x1024",
+            _ => DefaultImageSize
+        };
     }
 
     private static string BuildSingleArticleImagePrompt(string title, string articleMarkdown)

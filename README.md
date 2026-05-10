@@ -1,6 +1,6 @@
 # VeraMedia
 
-VeraMedia 是一个自媒体运营 Agent MVP：用户通过实时对话提交链接、文章或选题，系统保存会话，并通过 OpenAI 兼容接口生成内容。
+VeraMedia 是一个自媒体运营 Agent 工作台：用户通过实时对话提交链接、文章、附件或选题，系统保存会话，并通过 OpenAI 兼容接口完成写作、配图、分析、翻译、研究和 PPT 生成等任务。
 
 ## 目录结构
 
@@ -82,22 +82,82 @@ npm run dev
 
 - Base URL: `https://api.openai.com/v1`
 - API Key: 你的服务端 key
-- 聊天模型: 兼容 Chat Completions 的模型名
+- 聊天模型: 兼容 Chat Completions 或 Responses 的模型名
+- 生图模型: 兼容 `/v1/images/generations` 的模型名
 
 如果不配置 Provider，系统会返回演示流式回复，便于验证对话体验。
 
-## 已实现的 MVP 能力
+## 已实现能力
 
 - 用户注册、登录、JWT 鉴权
 - 会话创建、会话列表、消息持久化
-- SSE 实时流式对话
-- OpenAI-compatible Provider 保存
-- 没有 API Key 时的演示 Agent 回复
-- 前端聊天工作台和 API 配置面板
+- 后台生成任务、任务中心、取消/重试和 SSE 进度同步
+- OpenAI-compatible Provider 保存、模型获取、聊天/生图测试
+- GPT-5.5 风格思考层级：快速、思考、专家
+- 写作、图像生成、编程、翻译、深入研究、解题答疑、数据分析、超能模式、PPT 生成
+- 上传附件预览、格式限制、附件正文提取
+- 支持图片题图/参考图以多模态方式发送给模型
+- URL 正文抓取和参考来源浮层
+- 文章资产、图片资产、版本恢复、文档编辑器
+- DOCX/PPTX 导出
+- Linux Docker 下 PPT 转视频，支持读取每页备注生成本地 TTS 音频并同步合成 MP4
 
-## 下一步建议
+## Linux Docker 部署
 
-- 增加 URL 正文抓取工具
-- 增加结构化文章产物表和右侧编辑器
-- 增加图片生成接口和图片素材库
-- 增加 Refresh Token、API Key 加密、用量统计
+先发布后端，发布产物会包含前端构建文件和 PPT 转视频脚本：
+
+```bash
+dotnet publish src/backend/VeraMedia.Api.csproj -c Release -o publish
+```
+
+然后构建并启动容器：
+
+```bash
+docker compose build --no-cache
+docker compose up -d
+```
+
+访问默认端口：
+
+- Web: `http://服务器IP:5178`
+- 容器内服务端口: `8080`
+
+持久化目录：
+
+- `./AppData:/app/AppData`
+- `./publish:/app`
+
+生产环境需要配置可用的 MySQL 5.7 连接串。可以通过环境变量覆盖：
+
+```text
+ConnectionStrings__Default=Server=你的MySQL地址;Port=3306;Database=veramedia;User=用户名;Password=密码;CharSet=utf8mb4;SslMode=None;
+```
+
+注意：容器内的 `localhost` 指容器自身。如果 MySQL 在宿主机或其他容器中，请使用宿主机可访问地址、Docker 网络服务名，或反向代理/数据库内网地址，不要直接使用 `localhost`。
+
+Docker 镜像内已安装 PPT 转视频所需依赖：
+
+- `libreoffice`
+- `poppler-utils`
+- `ffmpeg`
+- `espeak-ng`
+- `fonts-noto-cjk`
+
+如果放在 Nginx 或其他 HTTPS 反向代理后面，请转发以下头，后端会用它们生成正确的上传文件 URL：
+
+```nginx
+proxy_set_header Host $host;
+proxy_set_header X-Forwarded-Host $host;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+## 重新部署
+
+```bash
+git pull
+dotnet publish src/backend/VeraMedia.Api.csproj -c Release -o publish
+docker compose build --no-cache
+docker compose up -d
+docker compose logs -f veramedia
+```

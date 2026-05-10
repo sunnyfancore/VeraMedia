@@ -23,13 +23,8 @@ public sealed partial class WebPageContentService(HttpClient httpClient) : IWebP
 
     public async Task<IReadOnlyList<WebPageFetchResult>> FetchAsync(IReadOnlyList<string> urls, CancellationToken cancellationToken)
     {
-        var results = new List<WebPageFetchResult>();
-        foreach (var url in urls)
-        {
-            results.Add(await FetchOneAsync(url, cancellationToken));
-        }
-
-        return results;
+        var tasks = urls.Select(url => FetchOneAsync(url, cancellationToken));
+        return await Task.WhenAll(tasks);
     }
 
     private async Task<WebPageFetchResult> FetchOneAsync(string url, CancellationToken cancellationToken)
