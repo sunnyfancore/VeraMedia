@@ -3935,7 +3935,6 @@ function App() {
           {slides.length > previewSlides.length && <p className="ppt-spec-more">还有 {slides.length - previewSlides.length} 页已规划，可直接导出完整 PPT。</p>}
           <div className="ppt-spec-actions">
             <button type="button" onClick={() => downloadMessageExport(message, 'pptx')}><Download size={14} />下载 PPT</button>
-            <button type="button" onClick={() => downloadMessageExport(message, 'mp4')}><Video size={14} />生成视频</button>
           </div>
         </section>
       </div>
@@ -4058,10 +4057,6 @@ function App() {
             <button className="pill-action" type="button" title="下载 PPT" onClick={() => void downloadMessageExport(message, 'pptx')}>
               <Presentation size={15} />
               下载
-            </button>
-            <button className="pill-action" type="button" title="生成视频" onClick={() => void downloadMessageExport(message, 'mp4')}>
-              <Video size={15} />
-              视频
             </button>
           </>
         )}
