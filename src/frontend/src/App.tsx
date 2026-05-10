@@ -2961,47 +2961,86 @@ function App() {
       return
     }
 
+    const sourceSlides = pptVideoSlides
+    const batchSize = 4
+    let aiGeneratedCount = 0
+    let fallbackCount = 0
+
+    const applyGeneratedNotes = (notesBySlide: Map<number, string>) => {
+      setPptVideoSlides((current) => current.map((slide) => ({
+        ...slide,
+        notes: notesBySlide.get(slide.index) || slide.notes,
+      })))
+    }
+
+    const applyFallbackNotes = (slides: PptVideoSlide[]) => {
+      const fallbackNotes = new Map(slides.map((slide) => [slide.index, createPptDialogueDraft(slide.notes)]))
+      fallbackCount += slides.length
+      applyGeneratedNotes(fallbackNotes)
+    }
+
     setPptVideoDialogueBusy(true)
     setPptVideoSettings((current) => ({ ...current, dubbingMode: 'dialogue' }))
     try {
-      const response = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/dialogue-script`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          style: '自然、专业、像两位真实讲解者在围绕页面内容交流',
-          slides: pptVideoSlides.map((slide) => ({
-            index: slide.index,
-            title: slide.title,
-            notes: slide.notes,
-          })),
-        }),
-      })
-      if (!response.ok) {
-        throw new Error(await readErrorMessage(response, '生成对话稿失败'))
+      for (let start = 0; start < sourceSlides.length; start += batchSize) {
+        const batch = sourceSlides.slice(start, start + batchSize)
+        const done = Math.min(start + batch.length, sourceSlides.length)
+        setPptVideoStatus(`正在优化对话稿 (${done}/${sourceSlides.length})`)
+
+        const controller = new AbortController()
+        const timer = window.setTimeout(() => controller.abort(), 38000)
+        try {
+          const response = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/dialogue-script`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            signal: controller.signal,
+            body: JSON.stringify({
+              style: '自然、专业、像两位真实讲解者在围绕页面内容交流',
+              slides: batch.map((slide) => ({
+                index: slide.index,
+                title: slide.title,
+                notes: slide.notes,
+              })),
+            }),
+          })
+          if (!response.ok) {
+            applyFallbackNotes(batch)
+            continue
+          }
+
+          const data = await response.json() as {
+            slides?: Array<{ index: number; notes?: string }>
+            aiGenerated?: boolean
+          }
+          const notesBySlide = new Map((data.slides || [])
+            .filter((slide) => slide.index > 0 && slide.notes)
+            .map((slide) => [slide.index, slide.notes || '']))
+
+          if (notesBySlide.size === 0) {
+            applyFallbackNotes(batch)
+            continue
+          }
+
+          if (data.aiGenerated) aiGeneratedCount += notesBySlide.size
+          else fallbackCount += notesBySlide.size
+          applyGeneratedNotes(notesBySlide)
+        } catch {
+          applyFallbackNotes(batch)
+        } finally {
+          window.clearTimeout(timer)
+        }
       }
 
-      const data = await response.json() as {
-        slides?: Array<{ index: number; notes?: string }>
-        aiGenerated?: boolean
-        message?: string
-      }
-      const notesBySlide = new Map((data.slides || [])
-        .filter((slide) => slide.index > 0 && slide.notes)
-        .map((slide) => [slide.index, slide.notes || '']))
-
-      if (notesBySlide.size === 0) {
-        throw new Error('没有生成可用的对话稿')
-      }
-
-      setPptVideoSlides((current) => current.map((slide) => ({
-        ...slide,
-        notes: notesBySlide.get(slide.index) || createPptDialogueDraft(slide.notes),
-      })))
-      showToast(data.message || (data.aiGenerated ? '已生成更自然的对话稿' : '已使用本地规则生成对话稿'), 6000)
-    } catch (error) {
-      setPptVideoSlides((current) => current.map((slide) => ({ ...slide, notes: createPptDialogueDraft(slide.notes) })))
-      const message = error instanceof Error ? error.message : '对话稿生成失败'
-      showToast(`${message}，已切换为本地对话稿`, 8000)
+      setPptVideoStatus(aiGeneratedCount > 0
+        ? `对话稿已优化（AI ${aiGeneratedCount} 页，本地 ${fallbackCount} 页）`
+        : '对话稿已使用本地规则生成')
+      showToast(aiGeneratedCount > 0
+        ? `对话稿已分批优化，AI 完成 ${aiGeneratedCount} 页`
+        : 'AI 响应较慢，已使用本地规则生成对话稿', 7000)
+    } catch {
+      applyFallbackNotes(sourceSlides)
+      setPptVideoStatus('对话稿已使用本地规则生成')
+      showToast('AI 优化暂不可用，已切换为本地对话稿', 8000)
     } finally {
       setPptVideoDialogueBusy(false)
     }
