@@ -256,6 +256,78 @@ const getPptVideoProgressDetail = (phase: string, status: string) => {
   return trimmedStatus
 }
 
+const pptDialogueLinePattern = /^\s*(?:[-*]\s*)?([\p{L}\p{N}_\-\s]{1,24})\s*[:\uFF1A]\s*(.+)$/u
+
+const normalizePptDialogueSpeaker = (speaker: string) =>
+  speaker.replace(/[\[\]\u3010\u3011]/g, '').trim()
+
+const detectPptDialogueSpeakers = (slides: PptVideoSlide[]) => {
+  const seen = new Set<string>()
+  const speakers: string[] = []
+  for (const slide of slides) {
+    for (const line of slide.notes.split(/\r?\n/)) {
+      const match = line.match(pptDialogueLinePattern)
+      if (!match) continue
+      const speaker = normalizePptDialogueSpeaker(match[1])
+      if (!speaker || seen.has(speaker)) continue
+      seen.add(speaker)
+      speakers.push(speaker)
+    }
+  }
+  return speakers
+}
+
+const isPptDialogueScript = (notes: string) =>
+  notes.split(/\r?\n/).some((line) => pptDialogueLinePattern.test(line))
+
+const splitPptNarrationSentences = (notes: string) => notes
+  .replace(/\r/g, '')
+  .replace(/([\u3002\uFF01\uFF1F!?\uFF1B;])/gu, '$1\n')
+  .split(/\n+/)
+  .map((item) => item.trim())
+  .filter(Boolean)
+
+const createPptDialogueDraft = (notes: string) => {
+  const trimmed = notes.trim()
+  if (!trimmed || isPptDialogueScript(trimmed)) return notes
+
+  const host = '\u4e3b\u6301\u4eba'
+  const guest = '\u5609\u5bbe'
+  const sentences = splitPptNarrationSentences(trimmed)
+  if (sentences.length <= 1) return `${host}\uFF1A${trimmed}`
+
+  return sentences
+    .map((sentence, index) => `${index % 2 === 0 ? host : guest}\uFF1A${sentence}`)
+    .join('\n')
+}
+
+const getPptDialogueVoiceForSpeaker = (speaker: string, index: number, settings: PptVideoSettings) => {
+  const normalized = normalizePptDialogueSpeaker(speaker).toLowerCase()
+  if (normalized.includes('\u65c1\u767d') || normalized.includes('narrator')) return settings.dialogueNarratorVoice
+  if (normalized.includes('\u4e3b\u6301') || normalized.includes('\u4e3b\u8bb2') || normalized.includes('host')) return settings.dialogueHostVoice
+  if (normalized.includes('\u5609\u5bbe') || normalized.includes('\u540c\u4e8b') || normalized.includes('\u5ba2\u6237') || normalized.includes('guest')) return settings.dialogueGuestVoice
+  return index % 2 === 0 ? settings.dialogueHostVoice : settings.dialogueGuestVoice
+}
+
+const buildPptVideoDialogueVoices = (slides: PptVideoSlide[], settings: PptVideoSettings) => {
+  const voices: Record<string, string> = {
+    ['\u4e3b\u6301\u4eba']: settings.dialogueHostVoice,
+    ['\u4e3b\u8bb2\u4eba']: settings.dialogueHostVoice,
+    Host: settings.dialogueHostVoice,
+    ['\u65c1\u767d']: settings.dialogueNarratorVoice,
+    Narrator: settings.dialogueNarratorVoice,
+    ['\u5609\u5bbe']: settings.dialogueGuestVoice,
+    ['\u540c\u4e8b']: settings.dialogueGuestVoice,
+    ['\u5ba2\u6237']: settings.dialogueGuestVoice,
+    Guest: settings.dialogueGuestVoice,
+  }
+
+  detectPptDialogueSpeakers(slides).forEach((speaker, index) => {
+    voices[speaker] = getPptDialogueVoiceForSpeaker(speaker, index, settings)
+  })
+  return voices
+}
+
 const imageTemplates = [
   { value: 'none', label: '模板', prompt: '' },
   { value: 'cover', label: '封面图', prompt: '生成一张适合中文内容平台的封面图，主体明确，画面有传播感。' },
@@ -580,6 +652,7 @@ function App() {
     ? ''
     : pptVideoProgressDetail || (!pptVideoPhase && !pptVideoStatus ? '就绪，等待操作...' : '')
   const pptVideoProgressTitle = `${pptVideoPhase || '处理进度'}${pptVideoProgressInlineDetail ? ` ${pptVideoProgressInlineDetail}` : ''}`
+  const pptVideoDialogueSpeakers = detectPptDialogueSpeakers(pptVideoSlides)
   const [articleVersions, setArticleVersions] = useState<ArticleVersion[] | null>(null)
   const [articleVersionTitle, setArticleVersionTitle] = useState('')
   const [articleVersionProjectId, setArticleVersionProjectId] = useState<number | null>(null)
@@ -2831,6 +2904,18 @@ function App() {
   const updatePptVideoSetting = <K extends keyof PptVideoSettings>(key: K, value: PptVideoSettings[K]) => {
     setPptVideoSettings((current) => ({ ...current, [key]: value }))
   }
+
+  const convertPptVideoSlideToDialogue = (index: number) => {
+    setPptVideoSettings((current) => ({ ...current, dubbingMode: 'dialogue' }))
+    setPptVideoSlides((current) => current.map((slide) =>
+      slide.index === index ? { ...slide, notes: createPptDialogueDraft(slide.notes) } : slide))
+  }
+
+  const convertAllPptVideoNotesToDialogue = () => {
+    setPptVideoSettings((current) => ({ ...current, dubbingMode: 'dialogue' }))
+    setPptVideoSlides((current) => current.map((slide) => ({ ...slide, notes: createPptDialogueDraft(slide.notes) })))
+  }
+
   const playVoiceSample = async () => {
     if (voiceSampleRef.current) {
       voiceSampleRef.current.pause()
@@ -2882,17 +2967,7 @@ function App() {
       form.append('volume', String(pptVideoSettings.volume))
       form.append('dubbingMode', pptVideoSettings.dubbingMode)
       if (pptVideoSettings.dubbingMode === 'dialogue') {
-        form.append('dialogueVoicesJson', JSON.stringify({
-          主持人: pptVideoSettings.dialogueHostVoice,
-          主讲人: pptVideoSettings.dialogueHostVoice,
-          Host: pptVideoSettings.dialogueHostVoice,
-          旁白: pptVideoSettings.dialogueNarratorVoice,
-          Narrator: pptVideoSettings.dialogueNarratorVoice,
-          嘉宾: pptVideoSettings.dialogueGuestVoice,
-          同事: pptVideoSettings.dialogueGuestVoice,
-          客户: pptVideoSettings.dialogueGuestVoice,
-          Guest: pptVideoSettings.dialogueGuestVoice,
-        }))
+        form.append('dialogueVoicesJson', JSON.stringify(buildPptVideoDialogueVoices(pptVideoSlides, pptVideoSettings)))
       }
       form.append('notesJson', JSON.stringify(Object.fromEntries(pptVideoSlides.map((slide) => [slide.index, slide.notes]))))
       if (pptVideoPreviewId) form.append('previewId', pptVideoPreviewId)
@@ -4652,6 +4727,17 @@ function App() {
                 <div className="ppt-video-preview-head">
                   <strong>幻灯片预览 · 演讲稿编辑</strong>
                   <span>可直接编辑每页备注，转换时会使用这里的文字生成语音</span>
+                  {pptVideoSettings.dubbingMode === 'dialogue' && pptVideoSlides.length > 0 && (
+                    <div className="ppt-dialogue-actions">
+                      {pptVideoDialogueSpeakers.length > 0 && (
+                        <span className="ppt-dialogue-roles">角色：{pptVideoDialogueSpeakers.slice(0, 4).join('、')}{pptVideoDialogueSpeakers.length > 4 ? ` +${pptVideoDialogueSpeakers.length - 4}` : ''}</span>
+                      )}
+                      <button type="button" onClick={convertAllPptVideoNotesToDialogue}>
+                        <Users size={13} />
+                        全部转对话
+                      </button>
+                    </div>
+                  )}
                 </div>
                 {pptVideoSlides.length === 0 ? (
                   <div className={pptVideoPreviewBusy ? 'ppt-video-empty is-loading' : 'ppt-video-empty'}>
@@ -4679,7 +4765,15 @@ function App() {
                           <span>{slide.index}</span>
                         </div>
                         <div className="ppt-viewer-row-notes">
-                          <strong>{slide.title}</strong>
+                          <div className="ppt-notes-title-row">
+                            <strong>{slide.title}</strong>
+                            {pptVideoSettings.dubbingMode === 'dialogue' && (
+                              <button type="button" onClick={() => convertPptVideoSlideToDialogue(slide.index)}>
+                                <Users size={12} />
+                                转对话
+                              </button>
+                            )}
+                          </div>
                           <textarea
                             value={slide.notes}
                             placeholder="这一页没有备注。可在这里补充旁白；留空则生成静音片段。"

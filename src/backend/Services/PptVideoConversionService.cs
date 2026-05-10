@@ -814,7 +814,7 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
         {
             var spoken = Regex.Replace(currentText.ToString(), @"\s+", " ").Trim();
             if (!string.IsNullOrWhiteSpace(spoken))
-                turns.Add(new PptVideoDialogueTurn(string.IsNullOrWhiteSpace(currentSpeaker) ? "旁白" : currentSpeaker, spoken));
+                turns.Add(new PptVideoDialogueTurn(string.IsNullOrWhiteSpace(currentSpeaker) ? "\u65c1\u767d" : currentSpeaker, spoken));
             currentText.Clear();
         }
 
@@ -837,7 +837,7 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
             }
             else
             {
-                currentSpeaker = "旁白";
+                currentSpeaker = "\u65c1\u767d";
                 currentText.Append(line);
             }
         }
@@ -850,7 +850,7 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
     {
         speaker = "";
         spoken = "";
-        var match = Regex.Match(line, @"^\s*(?:[-*]\s*)?(?<speaker>[\p{L}\p{N}_\-\s]{1,24})\s*[：:]\s*(?<text>.+)$");
+        var match = Regex.Match(line, @"^\s*(?:[-*]\s*)?(?<speaker>[\p{L}\p{N}_\-\s]{1,24})\s*[\uFF1A:]\s*(?<text>.+)$");
         if (!match.Success) return false;
 
         var role = NormalizeSpeaker(match.Groups["speaker"].Value);
@@ -892,18 +892,18 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
             }
         }
 
-        if (normalized.Contains("旁白", StringComparison.OrdinalIgnoreCase) ||
+        if (normalized.Contains("\u65c1\u767d", StringComparison.OrdinalIgnoreCase) ||
             normalized.Contains("narrator", StringComparison.OrdinalIgnoreCase))
             return defaultVoiceKey;
 
-        if (normalized.Contains("主持", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Contains("主讲", StringComparison.OrdinalIgnoreCase) ||
+        if (normalized.Contains("\u4e3b\u6301", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("\u4e3b\u8bb2", StringComparison.OrdinalIgnoreCase) ||
             normalized.Contains("host", StringComparison.OrdinalIgnoreCase))
             return defaultVoiceKey;
 
-        if (normalized.Contains("嘉宾", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Contains("同事", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Contains("客户", StringComparison.OrdinalIgnoreCase) ||
+        if (normalized.Contains("\u5609\u5bbe", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("\u540c\u4e8b", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("\u5ba2\u6237", StringComparison.OrdinalIgnoreCase) ||
             normalized.Contains("guest", StringComparison.OrdinalIgnoreCase))
             return string.Equals(defaultVoiceKey, "zh-m", StringComparison.OrdinalIgnoreCase) ? "zh" : "zh-m";
 
@@ -917,8 +917,8 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
         return speaker
             .Replace("[", "", StringComparison.Ordinal)
             .Replace("]", "", StringComparison.Ordinal)
-            .Replace("【", "", StringComparison.Ordinal)
-            .Replace("】", "", StringComparison.Ordinal)
+            .Replace("\u3010", "", StringComparison.Ordinal)
+            .Replace("\u3011", "", StringComparison.Ordinal)
             .Trim();
     }
 

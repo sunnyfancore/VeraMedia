@@ -1467,6 +1467,44 @@ button {
   border-bottom: 1px solid #f1f5f9;
 }
 
+.ppt-dialogue-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ppt-dialogue-actions button,
+.ppt-notes-title-row button {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  padding: 0 9px;
+  color: #2563eb;
+  background: #eff6ff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.ppt-dialogue-actions button:hover,
+.ppt-notes-title-row button:hover {
+  background: #dbeafe;
+}
+
+.ppt-dialogue-roles {
+  max-width: 320px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ppt-video-preview-head span,
 .ppt-video-progress p {
   margin: 0;
@@ -1609,7 +1647,16 @@ button {
   min-width: 0;
 }
 
+.ppt-notes-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .ppt-viewer-row-notes strong {
+  min-width: 0;
   font-size: 12px;
   color: #1e293b;
   overflow: hidden;
