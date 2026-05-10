@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.IO.Compression;
+using System.Xml.Linq;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using A = DocumentFormat.OpenXml.Drawing;
@@ -13,6 +15,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
 {
     private const string DocxContentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private const string PptxContentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    private const string PptxMainPartContentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml";
     private static readonly HttpClient ImageHttp = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     public OfficeExportFile CreateDocx(string title, string markdown)
@@ -99,7 +102,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
         }
 
         var fileTitle = slides.FirstOrDefault()?.Title ?? title;
-        return new OfficeExportFile(BuildFileName(fileTitle, "pptx"), PptxContentType, stream.ToArray());
+        return new OfficeExportFile(BuildFileName(fileTitle, "pptx"), PptxContentType, NormalizePptxPackage(stream.ToArray()));
     }
 
     private static async Task<Dictionary<int, byte[]>> DownloadSlideImagesAsync(IReadOnlyList<SlideDraft> slides)
@@ -145,6 +148,99 @@ public sealed partial class OfficeExportService : IOfficeExportService
         return "image/jpeg";
     }
 
+    private static byte[] NormalizePptxPackage(byte[] content)
+    {
+        using var input = new MemoryStream(content);
+        using var source = new ZipArchive(input, ZipArchiveMode.Read, leaveOpen: false);
+        using var output = new MemoryStream();
+        using (var target = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            XDocument? contentTypes = null;
+            foreach (var entry in source.Entries)
+            {
+                if (string.Equals(entry.FullName, "[Content_Types].xml", StringComparison.OrdinalIgnoreCase))
+                {
+                    using var reader = new StreamReader(entry.Open());
+                    contentTypes = XDocument.Parse(reader.ReadToEnd());
+                    continue;
+                }
+
+                var copy = target.CreateEntry(entry.FullName, CompressionLevel.Optimal);
+                copy.LastWriteTime = entry.LastWriteTime;
+                using var inputStream = entry.Open();
+                using var outputStream = copy.Open();
+                inputStream.CopyTo(outputStream);
+            }
+
+            contentTypes ??= new XDocument(new XElement(ContentTypesNs + "Types"));
+            NormalizeContentTypes(contentTypes);
+
+            var contentTypesEntry = target.CreateEntry("[Content_Types].xml", CompressionLevel.Optimal);
+            using var writer = new StreamWriter(contentTypesEntry.Open(), new UTF8Encoding(false));
+            contentTypes.Save(writer, SaveOptions.DisableFormatting);
+        }
+
+        return output.ToArray();
+    }
+
+    private static readonly XNamespace ContentTypesNs = "http://schemas.openxmlformats.org/package/2006/content-types";
+
+    private static void NormalizeContentTypes(XDocument contentTypes)
+    {
+        var root = contentTypes.Root ?? throw new InvalidOperationException("Missing PPTX content types root.");
+
+        var xmlDefaults = root.Elements(ContentTypesNs + "Default")
+            .Where(x => string.Equals((string?)x.Attribute("Extension"), "xml", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (xmlDefaults.Count == 0)
+        {
+            root.AddFirst(new XElement(ContentTypesNs + "Default",
+                new XAttribute("Extension", "xml"),
+                new XAttribute("ContentType", "application/xml")));
+        }
+        else
+        {
+            xmlDefaults[0].SetAttributeValue("ContentType", "application/xml");
+            foreach (var duplicate in xmlDefaults.Skip(1))
+                duplicate.Remove();
+        }
+
+        EnsureDefaultContentType(root, "rels", "application/vnd.openxmlformats-package.relationships+xml");
+        EnsureOverrideContentType(root, "/ppt/presentation.xml", PptxMainPartContentType);
+    }
+
+    private static void EnsureDefaultContentType(XElement root, string extension, string contentType)
+    {
+        var existing = root.Elements(ContentTypesNs + "Default")
+            .FirstOrDefault(x => string.Equals((string?)x.Attribute("Extension"), extension, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+        {
+            root.AddFirst(new XElement(ContentTypesNs + "Default",
+                new XAttribute("Extension", extension),
+                new XAttribute("ContentType", contentType)));
+        }
+        else
+        {
+            existing.SetAttributeValue("ContentType", contentType);
+        }
+    }
+
+    private static void EnsureOverrideContentType(XElement root, string partName, string contentType)
+    {
+        var existing = root.Elements(ContentTypesNs + "Override")
+            .FirstOrDefault(x => string.Equals((string?)x.Attribute("PartName"), partName, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+        {
+            root.Add(new XElement(ContentTypesNs + "Override",
+                new XAttribute("PartName", partName),
+                new XAttribute("ContentType", contentType)));
+        }
+        else
+        {
+            existing.SetAttributeValue("ContentType", contentType);
+        }
+    }
+
     private static SlideLayoutPart AddPresentationInfrastructure(PresentationPart presentationPart)
     {
         var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>();
@@ -174,8 +270,8 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 new A.FormatScheme(
                     new A.FillStyleList(
                         new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
-                        new A.GradientFill(),
-                        new A.GradientFill()),
+                        CreateThemeGradientFill(5400000),
+                        CreateThemeGradientFill(16200000)),
                     new A.LineStyleList(
                         new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 9525 },
                         new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 25400 },
@@ -216,6 +312,8 @@ public sealed partial class OfficeExportService : IOfficeExportService
             new P.TextStyles(new P.TitleStyle(), new P.BodyStyle(), new P.OtherStyle()));
         slideMasterPart.AddPart(themePart);
         slideMasterPart.SlideMaster.Save();
+        // PowerPoint expects slide layouts to keep a reverse relationship to their master.
+        slideLayoutPart.AddPart(slideMasterPart);
 
         var presentation = presentationPart.Presentation ?? throw new InvalidOperationException("Presentation part is not initialized.");
         var masterIds = presentation.SlideMasterIdList ??= new P.SlideMasterIdList();
@@ -227,6 +325,13 @@ public sealed partial class OfficeExportService : IOfficeExportService
 
         return slideLayoutPart;
     }
+
+    private static A.GradientFill CreateThemeGradientFill(int angle) =>
+        new(
+            new A.GradientStopList(
+                new A.GradientStop(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }) { Position = 0 },
+                new A.GradientStop(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }) { Position = 100000 }),
+            new A.LinearGradientFill { Angle = angle, Scaled = true });
 
     private static P.ShapeTree CreateEmptyShapeTree()
     {
