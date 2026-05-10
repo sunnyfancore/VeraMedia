@@ -785,13 +785,13 @@ public sealed partial class OfficeExportService : IOfficeExportService
     private static A.Paragraph CreateDrawingParagraph(string text, bool bullet, int fontSize, bool bold, string fontColor)
     {
         var paragraphProperties = new A.ParagraphProperties();
+        paragraphProperties.Append(new A.SpaceBefore(new A.SpacingPoints { Val = 600 }));
         if (bullet)
         {
-            paragraphProperties.Append(new A.BulletFont { Typeface = "Arial" });
-            paragraphProperties.Append(new A.CharacterBullet { Char = "●" });
             paragraphProperties.Append(new A.BulletSizePercentage { Val = 70000 });
+            paragraphProperties.Append(new A.BulletFont { Typeface = "Arial" });
+            paragraphProperties.Append(new A.CharacterBullet { Char = "\u2022" });
         }
-        paragraphProperties.Append(new A.SpaceBefore(new A.SpacingPoints { Val = 600 }));
 
         return new A.Paragraph(
             paragraphProperties,
