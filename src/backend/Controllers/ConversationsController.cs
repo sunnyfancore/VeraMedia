@@ -381,7 +381,7 @@ public sealed class ConversationsController(
 
         var payload = JsonSerializer.Serialize(new
         {
-            style = string.IsNullOrWhiteSpace(style) ? "自然、专业、适合 PPT 视频讲解" : style.Trim(),
+            style = string.IsNullOrWhiteSpace(style) ? "自然、专业、有节奏的 PPT 视频讲解" : style.Trim(),
             roles = new[] { "主持人", "嘉宾", "旁白" },
             slides = slides.Select(slide => new
             {
@@ -394,13 +394,16 @@ public sealed class ConversationsController(
         var turns = new[]
         {
             new ChatTurn("system", string.Join(Environment.NewLine, [
-                "你是资深视频脚本医生，专门把 PPT 备注改写成自然、可信、信息密度适中的双人对话配音稿。",
+                "你是资深商业视频脚本总监，负责把 PPT 备注改写成自然、克制、有信息密度的配音稿。",
                 "只输出严格 JSON，不要 Markdown，不要解释。",
                 "JSON 格式必须是：{\"slides\":[{\"index\":1,\"notes\":\"主持人：...\\n嘉宾：...\"}]}。",
-                "每页 notes 必须使用多行“角色：台词”。角色只能优先使用：主持人、嘉宾、旁白。",
-                "保留原备注事实，不编造数据、公司名、承诺或案例。",
-                "每页 2-6 句，口语自然，但不要闲聊；第一句承接页面标题，最后一句推进到下一页或总结重点。",
-                "如果原备注已经是对话，请润色节奏和表达，不要破坏角色结构。"
+                "每页 notes 必须使用多行“角色：台词”，角色优先使用：主持人、嘉宾、旁白；角色名前缀只用于系统分配音色，不要让台词内容重复说出角色身份。",
+                "严禁使用低质模板开头，包括但不限于：这一页讲的是、这页我们看到、本页主要介绍、首先来看这一页、接下来我们看到、从这张图可以看到。",
+                "开头要直接进入观点、痛点、结果或业务场景，可以承接标题，但不要解释“这一页是什么”。",
+                "语气像正式产品演示或业务汇报：准确、简洁、有推进感；不要闲聊、不要尬问答、不要感叹式营销腔。",
+                "保留原备注事实，不编造数据、公司名、承诺或案例；不确定的信息用概括表达。",
+                "每页 2-5 句，短句优先；最后一句自然收束本页重点，不要每页都机械预告下一页。",
+                "如果原备注已经是对话，请只润色节奏、删掉套话、增强表达，不要破坏角色结构。"
             ])),
             new ChatTurn("user", payload)
         };
@@ -515,7 +518,7 @@ public sealed class ConversationsController(
             BuildFallbackDialogueScript(slide.Title ?? "", slide.Notes ?? ""))).ToList();
     }
 
-    private static string BuildFallbackDialogueScript(string title, string notes)
+    private static string BuildFallbackDialogueScript(string _, string notes)
     {
         notes = NormalizeDialogueScript(notes);
         if (IsDialogueScript(notes))
@@ -526,22 +529,11 @@ public sealed class ConversationsController(
             return "";
 
         var lines = new List<string>();
-        var cleanTitle = Regex.Replace(title ?? "", @"\s+", " ").Trim();
-        if (!string.IsNullOrWhiteSpace(cleanTitle))
-            lines.Add($"主持人：这一页我们看「{cleanTitle}」。");
-
         for (var i = 0; i < sentences.Count; i++)
         {
             var role = i % 2 == 0 ? "主持人" : "嘉宾";
-            var text = sentences[i];
-            if (i == 0 && lines.Count > 0 && text.Contains(cleanTitle, StringComparison.OrdinalIgnoreCase))
-                lines[^1] = $"主持人：{text}";
-            else
-                lines.Add($"{role}：{text}");
+            lines.Add($"{role}：{sentences[i]}");
         }
-
-        if (lines.Count == 1)
-            lines.Add("嘉宾：这个点很关键，后面可以继续展开它对实际流程的影响。");
 
         return string.Join(Environment.NewLine, lines.Take(8));
     }

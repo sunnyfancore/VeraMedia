@@ -627,14 +627,10 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
         var cues = new List<string>();
         foreach (var turn in turns)
         {
-            var speaker = NormalizeSpeaker(turn.Speaker);
-            var prefix = string.IsNullOrWhiteSpace(speaker) ? "" : $"{speaker}: ";
-            var maxTextLen = Math.Max(42 - prefix.Length, 18);
-            var parts = SplitSubtitleTextForDialogue(turn.Text, maxTextLen);
+            var parts = SplitSubtitleTextForDialogue(turn.Text, 35);
             if (parts.Count == 0) continue;
 
-            for (var i = 0; i < parts.Count; i++)
-                cues.Add(i == 0 ? $"{prefix}{parts[i]}" : parts[i]);
+            cues.AddRange(parts);
         }
 
         return cues.Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
