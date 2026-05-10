@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -25,13 +26,16 @@ public sealed record PptVideoConversionRequest(
     string? BgmPath,
     int Volume,
     Dictionary<int, string>? OverrideNotes,
-    string? RenderedSlidesDir = null);
+    string? RenderedSlidesDir = null,
+    string? DubbingMode = null,
+    Dictionary<string, string>? DialogueVoices = null);
 
 public sealed record PptVideoEncoderInfo(string Encoder, string Mode, string Label, string? Device);
 
 public sealed record PptVideoConversionResult(string VideoPath, string FileName, int SlideCount, PptVideoEncoderInfo EncoderInfo);
 
 internal sealed record PptVideoSegmentSpec(int Index, string Image, string? Audio, string? Subtitle, double Duration, string Output);
+internal sealed record PptVideoDialogueTurn(string Speaker, string Text);
 
 public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThumbnailRenderer pptxThumbnailRenderer, ILibreOfficeService libreOfficeService, ILogger<PptVideoConversionService> logger) : IPptVideoConversionService
 {
@@ -98,6 +102,7 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
         var rate = SpeedMap.GetValueOrDefault(request.Speed, "+0%");
         var videoSize = ResolutionMap.GetValueOrDefault(request.Resolution, "1280:720");
         var renderDpi = GetRenderDpi(request.Resolution);
+        var dialogueEnabled = string.Equals(request.DubbingMode, "dialogue", StringComparison.OrdinalIgnoreCase);
 
         Directory.CreateDirectory(request.OutputDir);
         var workDir = Path.Combine(request.OutputDir, "tmp");
@@ -121,7 +126,7 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
         var audioDir = Path.Combine(request.OutputDir, "audio");
         Directory.CreateDirectory(audioDir);
         logger.LogInformation("Starting TTS generation for {Count} slides (parallel with rendering)", expectedSlideCount);
-        var ttsTask = GenerateAllAudiosAsync(notes, expectedSlideCount, request.Voice, rate, audioDir, cancellationToken);
+        var ttsTask = GenerateAllAudiosAsync(notes, expectedSlideCount, request.Voice, rate, audioDir, dialogueEnabled, request.DialogueVoices, cancellationToken);
 
         // Render slides concurrently
         logger.LogInformation("Rendering slides to images");
@@ -649,7 +654,7 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
 
     private async Task<Dictionary<int, string>> GenerateAllAudiosAsync(
         Dictionary<int, string> notes, int totalSlides, string voiceKey, string rate,
-        string audioDir, CancellationToken ct)
+        string audioDir, bool dialogueEnabled, IReadOnlyDictionary<string, string>? dialogueVoices, CancellationToken ct)
     {
         var audios = new Dictionary<int, string>();
         string? firstErrorMsg = null;
@@ -672,7 +677,7 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
                 await semaphore.WaitAsync(ct);
                 try
                 {
-                    await ttsClient.SynthesizeToFileAsync(text, edgeVoice, rate, audioPath, ct);
+                    audioPath = await GenerateSlideAudioAsync(text, idx, voiceKey, edgeVoice, rate, audioDir, dialogueEnabled, dialogueVoices, ct);
                     lock (audios) { audios[idx] = audioPath; }
                 }
                 catch (Exception ex)
@@ -693,6 +698,228 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
             throw new InvalidOperationException($"语音合成失败：{firstErrorMsg}");
         }
         return audios;
+    }
+
+    private async Task<string> GenerateSlideAudioAsync(
+        string text,
+        int slideIndex,
+        string defaultVoiceKey,
+        string defaultEdgeVoice,
+        string rate,
+        string audioDir,
+        bool dialogueEnabled,
+        IReadOnlyDictionary<string, string>? dialogueVoices,
+        CancellationToken ct)
+    {
+        var outputPath = Path.Combine(audioDir, $"slide-{slideIndex:D3}.mp3");
+        if (!dialogueEnabled)
+        {
+            await ttsClient.SynthesizeToFileAsync(text, defaultEdgeVoice, rate, outputPath, ct);
+            return outputPath;
+        }
+
+        var turns = ParseDialogueTurns(text);
+        if (turns.Count == 0)
+        {
+            await ttsClient.SynthesizeToFileAsync(text, defaultEdgeVoice, rate, outputPath, ct);
+            return outputPath;
+        }
+
+        if (turns.Count == 1)
+        {
+            var singleVoice = ResolveDialogueEdgeVoice(turns[0].Speaker, defaultVoiceKey, dialogueVoices, 0);
+            await ttsClient.SynthesizeToFileAsync(turns[0].Text, singleVoice, rate, outputPath, ct);
+            return outputPath;
+        }
+
+        var turnFiles = new List<string>(turns.Count);
+        for (var i = 0; i < turns.Count; i++)
+        {
+            var turn = turns[i];
+            if (string.IsNullOrWhiteSpace(turn.Text)) continue;
+
+            var turnPath = Path.Combine(audioDir, $"slide-{slideIndex:D3}-turn-{i + 1:D2}.mp3");
+            var edgeVoice = ResolveDialogueEdgeVoice(turn.Speaker, defaultVoiceKey, dialogueVoices, i);
+            await ttsClient.SynthesizeToFileAsync(turn.Text, edgeVoice, rate, turnPath, ct);
+            turnFiles.Add(turnPath);
+        }
+
+        if (turnFiles.Count == 0)
+        {
+            await ttsClient.SynthesizeToFileAsync(text, defaultEdgeVoice, rate, outputPath, ct);
+            return outputPath;
+        }
+
+        if (turnFiles.Count == 1)
+        {
+            File.Copy(turnFiles[0], outputPath, overwrite: true);
+            return outputPath;
+        }
+
+        var pausePath = Path.Combine(audioDir, $"slide-{slideIndex:D3}-pause.mp3");
+        await CreateDialoguePauseAsync(pausePath, ct);
+        await ConcatDialogueAudioAsync(turnFiles, pausePath, outputPath, Path.Combine(audioDir, $"slide-{slideIndex:D3}-dialogue.txt"), ct);
+        return outputPath;
+    }
+
+    private static async Task CreateDialoguePauseAsync(string outputPath, CancellationToken ct)
+    {
+        if (File.Exists(outputPath)) return;
+
+        await RunProcessAsync("ffmpeg",
+            ["-y", "-loglevel", "error",
+             "-f", "lavfi", "-t", "0.35", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+             "-q:a", "9", "-acodec", "libmp3lame", outputPath], ct);
+    }
+
+    private static async Task ConcatDialogueAudioAsync(
+        IReadOnlyList<string> turnFiles,
+        string pausePath,
+        string outputPath,
+        string listPath,
+        CancellationToken ct)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(listPath)!);
+        await using (var writer = new StreamWriter(listPath, false))
+        {
+            for (var i = 0; i < turnFiles.Count; i++)
+            {
+                await writer.WriteLineAsync($"file '{EscapeConcatPath(turnFiles[i])}'");
+                if (i < turnFiles.Count - 1)
+                    await writer.WriteLineAsync($"file '{EscapeConcatPath(pausePath)}'");
+            }
+        }
+
+        await RunProcessAsync("ffmpeg",
+            ["-y", "-loglevel", "error",
+             "-f", "concat", "-safe", "0", "-i", listPath,
+             "-vn", "-ar", "44100", "-ac", "2", "-c:a", "libmp3lame", "-q:a", "4",
+             outputPath], ct);
+    }
+
+    private static List<PptVideoDialogueTurn> ParseDialogueTurns(string text)
+    {
+        text = text
+            .Replace("\r", "")
+            .Replace("<#>", "", StringComparison.Ordinal)
+            .Replace("&lt;#&gt;", "", StringComparison.OrdinalIgnoreCase)
+            .Trim();
+        if (string.IsNullOrWhiteSpace(text)) return [];
+
+        var turns = new List<PptVideoDialogueTurn>();
+        var currentSpeaker = "";
+        var currentText = new StringBuilder();
+
+        void Flush()
+        {
+            var spoken = Regex.Replace(currentText.ToString(), @"\s+", " ").Trim();
+            if (!string.IsNullOrWhiteSpace(spoken))
+                turns.Add(new PptVideoDialogueTurn(string.IsNullOrWhiteSpace(currentSpeaker) ? "旁白" : currentSpeaker, spoken));
+            currentText.Clear();
+        }
+
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = rawLine.Trim();
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            if (TryParseDialogueLine(line, out var speaker, out var spoken))
+            {
+                Flush();
+                currentSpeaker = speaker;
+                currentText.Append(spoken);
+                continue;
+            }
+
+            if (currentText.Length > 0)
+            {
+                currentText.Append(' ').Append(line);
+            }
+            else
+            {
+                currentSpeaker = "旁白";
+                currentText.Append(line);
+            }
+        }
+
+        Flush();
+        return turns;
+    }
+
+    private static bool TryParseDialogueLine(string line, out string speaker, out string spoken)
+    {
+        speaker = "";
+        spoken = "";
+        var match = Regex.Match(line, @"^\s*(?:[-*]\s*)?(?<speaker>[\p{L}\p{N}_\-\s]{1,24})\s*[：:]\s*(?<text>.+)$");
+        if (!match.Success) return false;
+
+        var role = NormalizeSpeaker(match.Groups["speaker"].Value);
+        if (string.IsNullOrWhiteSpace(role) || !Regex.IsMatch(role, @"\p{L}")) return false;
+        if (role.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return false;
+
+        var text = match.Groups["text"].Value.Trim();
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        speaker = role;
+        spoken = text;
+        return true;
+    }
+
+    private static string ResolveDialogueEdgeVoice(
+        string speaker,
+        string defaultVoiceKey,
+        IReadOnlyDictionary<string, string>? dialogueVoices,
+        int turnIndex)
+    {
+        var voiceKey = ResolveDialogueVoiceKey(speaker, defaultVoiceKey, dialogueVoices, turnIndex);
+        return VoiceMap.GetValueOrDefault(voiceKey, VoiceMap.GetValueOrDefault(defaultVoiceKey, "zh-CN-XiaoxiaoNeural"));
+    }
+
+    private static string ResolveDialogueVoiceKey(
+        string speaker,
+        string defaultVoiceKey,
+        IReadOnlyDictionary<string, string>? dialogueVoices,
+        int turnIndex)
+    {
+        var normalized = NormalizeSpeaker(speaker);
+        if (dialogueVoices is not null)
+        {
+            foreach (var (role, voice) in dialogueVoices)
+            {
+                if (string.IsNullOrWhiteSpace(voice)) continue;
+                if (string.Equals(NormalizeSpeaker(role), normalized, StringComparison.OrdinalIgnoreCase))
+                    return voice.Trim();
+            }
+        }
+
+        if (normalized.Contains("旁白", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("narrator", StringComparison.OrdinalIgnoreCase))
+            return defaultVoiceKey;
+
+        if (normalized.Contains("主持", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("主讲", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("host", StringComparison.OrdinalIgnoreCase))
+            return defaultVoiceKey;
+
+        if (normalized.Contains("嘉宾", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("同事", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("客户", StringComparison.OrdinalIgnoreCase) ||
+            normalized.Contains("guest", StringComparison.OrdinalIgnoreCase))
+            return string.Equals(defaultVoiceKey, "zh-m", StringComparison.OrdinalIgnoreCase) ? "zh" : "zh-m";
+
+        return turnIndex % 2 == 0
+            ? defaultVoiceKey
+            : string.Equals(defaultVoiceKey, "zh-m", StringComparison.OrdinalIgnoreCase) ? "zh" : "zh-m";
+    }
+
+    private static string NormalizeSpeaker(string speaker)
+    {
+        return speaker
+            .Replace("[", "", StringComparison.Ordinal)
+            .Replace("]", "", StringComparison.Ordinal)
+            .Replace("【", "", StringComparison.Ordinal)
+            .Replace("】", "", StringComparison.Ordinal)
+            .Trim();
     }
 
     private static string DetectBestEncoder()

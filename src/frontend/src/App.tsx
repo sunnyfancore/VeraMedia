@@ -175,6 +175,10 @@ type PptVideoEncoderState = {
 }
 type PptVideoSettings = {
   voice: string
+  dubbingMode: string
+  dialogueHostVoice: string
+  dialogueGuestVoice: string
+  dialogueNarratorVoice: string
   speed: string
   bgmName: string
   volume: number
@@ -560,6 +564,10 @@ function App() {
   const [pptVideoElapsed, setPptVideoElapsed] = useState(0)
   const [pptVideoSettings, setPptVideoSettings] = useState<PptVideoSettings>({
     voice: 'zh',
+    dubbingMode: 'single',
+    dialogueHostVoice: 'zh',
+    dialogueGuestVoice: 'zh-m',
+    dialogueNarratorVoice: 'zh-story',
     speed: '1.0x',
     bgmName: '',
     volume: 30,
@@ -2872,6 +2880,20 @@ function App() {
       form.append('speed', pptVideoSettings.speed.replace('x', ''))
       form.append('resolution', pptVideoSettings.resolution)
       form.append('volume', String(pptVideoSettings.volume))
+      form.append('dubbingMode', pptVideoSettings.dubbingMode)
+      if (pptVideoSettings.dubbingMode === 'dialogue') {
+        form.append('dialogueVoicesJson', JSON.stringify({
+          主持人: pptVideoSettings.dialogueHostVoice,
+          主讲人: pptVideoSettings.dialogueHostVoice,
+          Host: pptVideoSettings.dialogueHostVoice,
+          旁白: pptVideoSettings.dialogueNarratorVoice,
+          Narrator: pptVideoSettings.dialogueNarratorVoice,
+          嘉宾: pptVideoSettings.dialogueGuestVoice,
+          同事: pptVideoSettings.dialogueGuestVoice,
+          客户: pptVideoSettings.dialogueGuestVoice,
+          Guest: pptVideoSettings.dialogueGuestVoice,
+        }))
+      }
       form.append('notesJson', JSON.stringify(Object.fromEntries(pptVideoSlides.map((slide) => [slide.index, slide.notes]))))
       if (pptVideoPreviewId) form.append('previewId', pptVideoPreviewId)
       if (pptVideoBgmFile) form.append('bgm', pptVideoBgmFile)
@@ -4534,6 +4556,35 @@ function App() {
                       </button>
                     </div>
                   </label>
+                  <label>
+                    配音
+                    <select value={pptVideoSettings.dubbingMode} onChange={(event) => updatePptVideoSetting('dubbingMode', event.target.value)}>
+                      <option value="single">单人旁白</option>
+                      <option value="dialogue">对话配音</option>
+                    </select>
+                  </label>
+                  {pptVideoSettings.dubbingMode === 'dialogue' && (
+                    <div className="ppt-dialogue-voice-grid">
+                      <label>
+                        主持人
+                        <select value={pptVideoSettings.dialogueHostVoice} onChange={(event) => updatePptVideoSetting('dialogueHostVoice', event.target.value)}>
+                          {pptVideoVoiceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        嘉宾
+                        <select value={pptVideoSettings.dialogueGuestVoice} onChange={(event) => updatePptVideoSetting('dialogueGuestVoice', event.target.value)}>
+                          {pptVideoVoiceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                        </select>
+                      </label>
+                      <label>
+                        旁白
+                        <select value={pptVideoSettings.dialogueNarratorVoice} onChange={(event) => updatePptVideoSetting('dialogueNarratorVoice', event.target.value)}>
+                          {pptVideoVoiceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                        </select>
+                      </label>
+                    </div>
+                  )}
                   <label>
                     语速
                     <select value={pptVideoSettings.speed} onChange={(event) => updatePptVideoSetting('speed', event.target.value)}>

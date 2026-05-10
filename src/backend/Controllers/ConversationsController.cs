@@ -215,6 +215,8 @@ public sealed class ConversationsController(
         [FromForm] string speed = "1.0",
         [FromForm] string resolution = "720p",
         [FromForm] int volume = 30,
+        [FromForm] string? dubbingMode = null,
+        [FromForm] string? dialogueVoicesJson = null,
         [FromForm] string? notesJson = null,
         [FromForm] string? previewId = null,
         [FromForm] IFormFile? bgm = null,
@@ -261,6 +263,16 @@ public sealed class ConversationsController(
             if (!string.IsNullOrWhiteSpace(notesJson))
                 overrideNotes = System.Text.Json.JsonSerializer.Deserialize<Dictionary<int, string>>(notesJson);
 
+            Dictionary<string, string>? dialogueVoices = null;
+            if (!string.IsNullOrWhiteSpace(dialogueVoicesJson))
+            {
+                var parsedVoices = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(dialogueVoicesJson);
+                if (parsedVoices is { Count: > 0 })
+                    dialogueVoices = new Dictionary<string, string>(
+                        parsedVoices.Where(item => !string.IsNullOrWhiteSpace(item.Key) && !string.IsNullOrWhiteSpace(item.Value)),
+                        StringComparer.OrdinalIgnoreCase);
+            }
+
             var task = pptVideoTaskManager.Create(workDir);
 
             var fileName = BuildExportFileName(Path.GetFileNameWithoutExtension(file.FileName), "mp4");
@@ -282,7 +294,9 @@ public sealed class ConversationsController(
                         string.IsNullOrWhiteSpace(bgmPath) ? null : bgmPath,
                         Math.Clamp(volume, 0, 100),
                         overrideNotes,
-                        renderedSlidesDir);
+                        renderedSlidesDir,
+                        string.IsNullOrWhiteSpace(dubbingMode) ? null : dubbingMode.Trim(),
+                        dialogueVoices);
 
                     var result = await pptVideoConversionService.ConvertAsync(request,
                         (stage, progress, slideIdx, slideTotal) =>

@@ -1384,6 +1384,17 @@ button {
   color: #2563eb;
   animation: ppt-voice-pulse 1s ease-in-out infinite;
 }
+
+.ppt-dialogue-voice-grid {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ppt-dialogue-voice-grid label {
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 6px;
+}
 @keyframes ppt-voice-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
