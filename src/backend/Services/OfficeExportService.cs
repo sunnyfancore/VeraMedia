@@ -1,5 +1,6 @@
-using System.Text.RegularExpressions;
 using System.Text.Json;
+using System.Text;
+using System.Text.RegularExpressions;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using A = DocumentFormat.OpenXml.Drawing;
@@ -97,7 +98,8 @@ public sealed partial class OfficeExportService : IOfficeExportService
             presentationPart.Presentation.Save();
         }
 
-        return new OfficeExportFile(BuildFileName(title, "pptx"), PptxContentType, stream.ToArray());
+        var fileTitle = slides.FirstOrDefault()?.Title ?? title;
+        return new OfficeExportFile(BuildFileName(fileTitle, "pptx"), PptxContentType, stream.ToArray());
     }
 
     private static async Task<Dictionary<int, byte[]>> DownloadSlideImagesAsync(IReadOnlyList<SlideDraft> slides)
@@ -1077,9 +1079,29 @@ public sealed partial class OfficeExportService : IOfficeExportService
 
     private static string BuildFileName(string title, string extension)
     {
-        var cleaned = Regex.Replace(title, @"[\\/:*?""<>|“”‘’«»]+", "").Trim();
+        var cleaned = SanitizeFileNameStem(title);
         if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "VeraMedia";
-        return $"{cleaned[..Math.Min(cleaned.Length, 32)]}.{extension}";
+        return $"{cleaned[..Math.Min(cleaned.Length, 48)].Trim()}.{extension.TrimStart('.')}";
+    }
+
+    private static string SanitizeFileNameStem(string title)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var normalized = (title ?? "").Normalize(NormalizationForm.FormKC);
+        var builder = new StringBuilder(normalized.Length);
+
+        foreach (var ch in normalized)
+        {
+            if (invalid.Contains(ch) || char.IsControl(ch))
+            {
+                builder.Append(' ');
+                continue;
+            }
+
+            builder.Append(char.IsLetterOrDigit(ch) || ch is ' ' or '-' or '_' ? ch : ' ');
+        }
+
+        return Regex.Replace(builder.ToString(), @"\s+", " ").Trim(' ', '-', '_', '.');
     }
 
     [GeneratedRegex(@"^(?:\u6587\u7ae0\u6807\u9898|\u6807\u9898|\u9898\u76ee|\u4e3b\u9898|\u9875\u6807\u9898)\s*[:\uff1a]\s*")]
@@ -1107,6 +1129,16 @@ public sealed partial class OfficeExportService : IOfficeExportService
         public static ThemePalette From(string theme)
         {
             var value = theme ?? "";
+            if (value.Contains("\u9ad8\u7aef", StringComparison.OrdinalIgnoreCase) || value.Contains("\u54c1\u724c", StringComparison.OrdinalIgnoreCase))
+            {
+                return new("C8A45D", "22C7A9", "F97316", "101828", "1D2939", "667085", "F7F4EE", "FFFBF3", "E7D8B5", "F2E2B8", "E6FFFA", "FFF3E8", "99F6E4", "0F766E", "0F1117", "191B22", "514229");
+            }
+
+            if (value.Contains("\u54a8\u8be2", StringComparison.OrdinalIgnoreCase) || value.Contains("\u89c6\u89c9\u53d9\u4e8b", StringComparison.OrdinalIgnoreCase))
+            {
+                return new("315CFF", "12B76A", "D0A85C", "101828", "1D2939", "667085", "F7F8FB", "EEF2FF", "D8DEEA", "C7D2FE", "ECFDF3", "FFF8E8", "A7F3D0", "047857", "09111F", "111827", "2D3748");
+            }
+
             if (value.Contains("科技", StringComparison.OrdinalIgnoreCase))
             {
                 return new("2563EB", "06B6D4", "F59E0B", "0F172A", "1E293B", "64748B", "F8FBFF", "EFF6FF", "D8E6FF", "BFDBFE", "ECFEFF", "FFF7ED", "A5F3FC", "0E7490", "07111F", "0B1B33", "1E3A5F");

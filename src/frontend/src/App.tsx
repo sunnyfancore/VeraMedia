@@ -163,7 +163,7 @@ const qaModeOptions = ['逐步讲解', '只给答案', '先提示后答案', '�
 const dataOutputOptions = ['洞察+表格', '只要结论', '详细分析', '可视化建议', '清洗建议'] as const
 const pptPageOptions = ['6页', '8页', '10页', '12页', '15页', '20页', '25页', '30页'] as const
 const pptAudienceOptions = ['商务汇报', '销售路演', '培训课件', '项目复盘', '产品介绍', '研究报告'] as const
-const pptDesignOptions = ['商务精美', '科技蓝', '极简高级', '发布会风', '数据报告', '培训课件'] as const
+const pptDesignOptions = ['高端大气', '咨询级', '品牌发布', '视觉叙事', '商务精美', '科技蓝', '极简高级', '发布会风', '数据报告', '培训课件'] as const
 const pptModeOptions = ['PPT', 'PPT视频'] as const
 const pptNarrationOptions = ['开启', '关闭'] as const
 type PptVideoSlide = { index: number; title: string; notes: string }
@@ -442,6 +442,35 @@ const getFileExtension = (fileName: string) => {
   const index = fileName.lastIndexOf('.')
   return index >= 0 ? fileName.slice(index).toLowerCase() : ''
 }
+
+const sanitizeDownloadFileName = (value: string, extension: 'docx' | 'pptx' | 'mp4') => {
+  const withoutExtension = value.replace(/\.[^.]+$/, '')
+  const stem = withoutExtension
+    .normalize('NFKC')
+    .replace(/[\\/:*?"<>|“”‘’«»]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\s_-]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 48)
+    .trim() || 'VeraMedia'
+  return `${stem}.${extension}`
+}
+
+const readDownloadFileName = (response: Response, extension: 'docx' | 'pptx' | 'mp4', fallbackTitle: string) => {
+  const disposition = response.headers.get('content-disposition') || ''
+  const encoded = disposition.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i)?.[1]
+  const plain = disposition.match(/filename\s*=\s*"?([^";]+)"?/i)?.[1]
+  const rawName = encoded || plain || fallbackTitle
+  const unquoted = rawName.trim().replace(/^["']|["']$/g, '')
+  try {
+    return sanitizeDownloadFileName(decodeURIComponent(unquoted), extension)
+  } catch {
+    return sanitizeDownloadFileName(unquoted, extension)
+  }
+}
+
+const getPptSpecTitle = (content: string) =>
+  content.match(/"title"\s*:\s*"([^"]{2,120})"/)?.[1]?.trim() || ''
 
 const getAttachmentKind = (file: Pick<Attachment, 'fileName' | 'contentType'>) => {
   const ext = getFileExtension(file.fileName)
@@ -732,7 +761,7 @@ function App() {
       dataOutput: '洞察+表格',
       pptPages: '12页',
       pptAudience: '商务汇报',
-      pptDesign: '商务精美',
+      pptDesign: '高端大气',
       pptMode: 'PPT',
       pptNarration: '开启',
     } as Record<string, string>,
@@ -1493,11 +1522,13 @@ function App() {
       if (key === 'ppt') {
         next.intentMode = 'document'
         next.outputFormat = 'pptx'
+        next.thinkingMode = 'expert'
+        next.temperature = Math.max(next.temperature || 0.7, 0.78)
         next.capabilityParams = {
           ...next.capabilityParams,
           pptMode: next.capabilityParams.pptMode || 'PPT',
           pptNarration: next.capabilityParams.pptNarration || '开启',
-          pptDesign: next.capabilityParams.pptDesign || '商务精美',
+          pptDesign: next.capabilityParams.pptDesign || '高端大气',
         }
       }
       if (key === 'research' || key === 'super') {
@@ -2060,7 +2091,7 @@ function App() {
       case 'research':
         return `请基于我上传的资料做深入研究和结构化整理：${names}。`
       case 'ppt':
-        return `请基于我上传的资料制作${agentOptions.capabilityParams.pptDesign || '商务精美'}风格的${agentOptions.capabilityParams.pptMode || 'PPT'}：${names}。`
+        return `请基于我上传的资料制作${agentOptions.capabilityParams.pptDesign || '高端大气'}风格的${agentOptions.capabilityParams.pptMode || 'PPT'}：${names}。`
       case 'image':
         return `请参考我上传的图片生成新图片：${names}。`
       default:
@@ -2109,9 +2140,11 @@ function App() {
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
-      const title = getCleanDocumentTitle(cleanArticleContent(message.content)).replace(/[\\/:*?"<>|""«»]+/g, '').slice(0, 32) || 'VeraMedia'
+      const fallbackTitle = format === 'pptx'
+        ? getPptSpecTitle(message.content) || getCleanDocumentTitle(cleanArticleContent(message.content))
+        : getCleanDocumentTitle(cleanArticleContent(message.content))
       link.href = url
-      link.download = `${title}.${format}`
+      link.download = readDownloadFileName(response, format, fallbackTitle)
       document.body.appendChild(link)
       link.click()
       link.remove()

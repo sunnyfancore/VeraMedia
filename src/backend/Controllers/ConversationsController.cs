@@ -167,10 +167,13 @@ public sealed class ConversationsController(
         var turns = new[]
         {
             new ChatTurn("system", string.Join(Environment.NewLine, [
-                "你是资深 PPT 策划与视觉设计师。你的任务不是总结文章，而是把内容制作成可直接导出的成品级 PPT 规格。",
+                "你是资深 PPT 创意总监与视觉设计师。你的任务不是总结文章，而是把内容制作成可直接导出的高端成品级 PPT 规格。",
                 "请只输出一个 fenced code block，语言标记必须是 ppt-spec，里面是严格 JSON。",
-                "JSON 格式：{\"title\":\"整套PPT标题\",\"subtitle\":\"副标题\",\"audience\":\"受众\",\"theme\":\"商务精美/科技蓝/极简高级/发布会风/数据报告/培训课件\",\"design\":{\"style\":\"视觉风格\",\"palette\":\"色彩建议\",\"motif\":\"贯穿全稿的视觉母题\"},\"slides\":[{\"title\":\"页标题\",\"subtitle\":\"可选副标题\",\"layout\":\"cover/agenda/section/title-content/two-column/data-card/process/timeline/summary\",\"bullets\":[\"短要点\"],\"visual\":\"这一页具体如何画：图表、卡片、流程、对比矩阵、场景图或视觉隐喻\",\"notes\":\"可直接放入备注区的演讲稿\"}]}",
-                "制作要求：封面和目录必须有；中间页面要交替使用不同版式；每页 bullets 控制在 2-5 条；visual 必须具体，不能写“配图即可”；notes 要与页面内容同步，方便 PPT 转视频配音。",
+                "JSON 格式：{\"title\":\"整套PPT标题\",\"subtitle\":\"副标题\",\"audience\":\"受众\",\"theme\":\"自定义高级主题名\",\"design\":{\"style\":\"视觉风格与质感\",\"palette\":\"色彩、光感、材质建议\",\"motif\":\"贯穿全稿的视觉母题\",\"composition\":\"版式语言与画面节奏\"},\"slides\":[{\"title\":\"页标题\",\"subtitle\":\"可选副标题\",\"layout\":\"cover/agenda/section/title-content/two-column/data-card/process/timeline/quote/stats/summary 或语义化变体\",\"bullets\":[\"短要点\"],\"visual\":\"这一页具体如何画：主视觉、图表、卡片、流程、对比矩阵、场景图、视觉隐喻、动线和留白\",\"notes\":\"可直接放入备注区的演讲稿\"}]}",
+                "制作要求：不要照抄固定模板；根据内容选择问题洞察、产品发布、咨询报告、品牌叙事、数据叙事或战役提案等更合适的结构。",
+                "封面要有明确主张，目录不是必须；如果目录会降低高级感，可以用章节引导页、场景页或问题页替代。",
+                "每页只表达一个核心判断；bullets 控制在 2-5 条，写结论、证据、数字或行动项；visual 必须像设计 brief，不能写“配图即可”。",
+                "允许大胆留白、强对比、大数字、全幅场景、杂志式标题、咨询级框架图、发布会式视觉焦点。notes 要与页面内容同步，方便 PPT 转视频配音。",
                 "不要输出 Markdown 大纲、不要解释、不要把 JSON 拆散。"
             ])),
             new ChatTurn("user", $"请将以下内容制作成精美 PPT 规格。标题参考：{title}\n\n{content}")
@@ -179,7 +182,7 @@ public sealed class ConversationsController(
             "expert",
             "business",
             "pptx",
-            0.35m,
+            0.62m,
             0,
             false,
             false,
@@ -187,7 +190,7 @@ public sealed class ConversationsController(
             CapabilityParams: new Dictionary<string, string>
             {
                 ["pptMode"] = "PPT",
-                ["pptDesign"] = "商务精美",
+                ["pptDesign"] = "高端大气",
                 ["pptAudience"] = "商务汇报"
             });
 
@@ -1090,9 +1093,22 @@ public sealed class ConversationsController(
     private static string BuildExportFileName(string title, string extension)
     {
         var invalid = Path.GetInvalidFileNameChars();
-        var cleaned = new string(title.Where(ch => !invalid.Contains(ch)).ToArray()).Trim();
+        var normalized = (title ?? "").Normalize(NormalizationForm.FormKC);
+        var builder = new StringBuilder(normalized.Length);
+        foreach (var ch in normalized)
+        {
+            if (invalid.Contains(ch) || char.IsControl(ch))
+            {
+                builder.Append(' ');
+                continue;
+            }
+
+            builder.Append(char.IsLetterOrDigit(ch) || ch is ' ' or '-' or '_' ? ch : ' ');
+        }
+
+        var cleaned = Regex.Replace(builder.ToString(), @"\s+", " ").Trim(' ', '-', '_', '.');
         if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "VeraMedia";
-        return $"{cleaned[..Math.Min(cleaned.Length, 32)]}.{extension}";
+        return $"{cleaned[..Math.Min(cleaned.Length, 48)].Trim()}.{extension.TrimStart('.')}";
     }
 
     [HttpDelete("{conversationId:long}")]
