@@ -1178,20 +1178,21 @@ button {
 
 .ppt-video-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(220px, 1.1fr) minmax(220px, 1.15fr);
-  align-items: start;
+  grid-template-columns: minmax(220px, 0.9fr) minmax(420px, 1.35fr) minmax(280px, 1fr) minmax(280px, 1fr);
+  align-items: stretch;
   gap: 10px;
 }
 
 .ppt-video-panel {
   min-width: 0;
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
+  height: 100%;
   min-height: 0;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 12px;
+  padding: 12px 14px;
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
   transition: box-shadow 0.2s, border-color 0.2s;
@@ -1217,6 +1218,7 @@ button {
 .ppt-video-panel h3 {
   color: #2563eb;
   font-size: 14px;
+  min-height: 22px;
   padding-bottom: 5px;
   border-bottom: 2px solid #eff6ff;
 }
@@ -1232,6 +1234,7 @@ button {
 
 .ppt-video-panel select,
 .ppt-video-panel input:not([type="checkbox"]):not([type="range"]) {
+  min-width: 0;
   min-height: 32px;
   padding: 6px 10px;
   border: 1px solid #cbd5e1;
@@ -1337,7 +1340,7 @@ button {
 
 .ppt-bgm-row {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto auto;
+  grid-template-columns: 34px minmax(0, 1fr) 72px 62px;
   color: #334155;
   font-size: 12px;
 }
@@ -1352,12 +1355,31 @@ button {
   width: 100%;
   accent-color: #2563eb;
 }
+
+.ppt-voice-primary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.ppt-voice-field {
+  grid-template-columns: 42px minmax(0, 1fr) !important;
+}
+
+.ppt-voice-field-wide {
+  grid-column: 1 / -1;
+  grid-template-columns: 54px minmax(0, 1fr) !important;
+}
+
 .ppt-voice-row {
   display: flex;
   gap: 6px;
   align-items: center;
+  min-width: 0;
 }
 .ppt-voice-row select {
+  min-width: 0;
   flex: 1;
 }
 .ppt-voice-sample {
@@ -1388,8 +1410,12 @@ button {
 .ppt-dialogue-voice-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px 8px;
+  gap: 7px 8px;
   min-width: 0;
+  padding: 8px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
 }
 
 .ppt-dialogue-voice-grid label {
@@ -1401,9 +1427,12 @@ button {
 
 .ppt-dialogue-voice-grid label select {
   width: 100%;
+  min-width: 0;
   min-height: 30px;
   padding: 4px 8px;
   font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ppt-dialogue-role-voices {
@@ -1413,7 +1442,7 @@ button {
   gap: 5px 8px;
   max-height: 82px;
   overflow: auto;
-  border-top: 1px solid #eef2f7;
+  border-top: 1px solid #e2e8f0;
   padding-top: 6px;
   padding-right: 2px;
 }
@@ -1428,6 +1457,10 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ppt-output-panel .ppt-convert-button {
+  margin-top: auto;
 }
 @keyframes ppt-voice-pulse {
   0%, 100% { opacity: 1; }
@@ -1962,7 +1995,7 @@ button {
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1320px) {
   .ppt-video-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2001,6 +2034,16 @@ button {
 
   .ppt-video-panel {
     min-height: 0;
+  }
+
+  .ppt-voice-primary-grid,
+  .ppt-dialogue-voice-grid,
+  .ppt-dialogue-role-voices {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ppt-voice-field-wide {
+    grid-column: auto;
   }
 }
 

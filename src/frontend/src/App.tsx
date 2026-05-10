@@ -4724,7 +4724,7 @@ function App() {
           <div className="ppt-video-page">
             <section className="ppt-video-studio" aria-label="PPT 转视频">
               <div className="ppt-video-grid">
-                <div className="ppt-video-panel">
+                <div className="ppt-video-panel ppt-file-panel">
                   <h3><UploadCloud size={15} /> 文件选择</h3>
                   <div className="ppt-file-row">
                     <label className={pptVideoBusy || pptVideoPreviewBusy ? 'ppt-file-button disabled' : 'ppt-file-button'}>
@@ -4743,26 +4743,34 @@ function App() {
                   </div>
                 </div>
 
-                <div className="ppt-video-panel">
+                <div className="ppt-video-panel ppt-voice-panel">
                   <h3><Volume2 size={15} /> 语音设置</h3>
-                  <label>
-                    音色
-                    <div className="ppt-voice-row">
-                      <select value={pptVideoSettings.voice} onChange={(event) => updatePptVideoSetting('voice', event.target.value)}>
-                        {pptVideoVoiceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  <div className="ppt-voice-primary-grid">
+                    <label className="ppt-voice-field ppt-voice-field-wide">
+                      音色
+                      <div className="ppt-voice-row">
+                        <select value={pptVideoSettings.voice} onChange={(event) => updatePptVideoSetting('voice', event.target.value)}>
+                          {pptVideoVoiceOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                        </select>
+                        <button type="button" className={`ppt-voice-sample${voiceSamplePlaying ? ' playing' : ''}`} onClick={() => void playVoiceSample()} title="试听音色">
+                          <Play size={13} />
+                        </button>
+                      </div>
+                    </label>
+                    <label className="ppt-voice-field">
+                      配音
+                      <select value={pptVideoSettings.dubbingMode} onChange={(event) => updatePptVideoSetting('dubbingMode', event.target.value)}>
+                        <option value="single">单人旁白</option>
+                        <option value="dialogue">对话配音</option>
                       </select>
-                      <button type="button" className={`ppt-voice-sample${voiceSamplePlaying ? ' playing' : ''}`} onClick={() => void playVoiceSample()} title="试听音色">
-                        <Play size={13} />
-                      </button>
-                    </div>
-                  </label>
-                  <label>
-                    配音
-                    <select value={pptVideoSettings.dubbingMode} onChange={(event) => updatePptVideoSetting('dubbingMode', event.target.value)}>
-                      <option value="single">单人旁白</option>
-                      <option value="dialogue">对话配音</option>
-                    </select>
-                  </label>
+                    </label>
+                    <label className="ppt-voice-field">
+                      语速
+                      <select value={pptVideoSettings.speed} onChange={(event) => updatePptVideoSetting('speed', event.target.value)}>
+                        {pptVideoSpeedOptions.map((item) => <option key={item} value={item}>{item}{item === '1.0x' ? '（正常）' : ''}</option>)}
+                      </select>
+                    </label>
+                  </div>
                   {pptVideoSettings.dubbingMode === 'dialogue' && (
                     <div className="ppt-dialogue-voice-grid">
                       <label>
@@ -4797,15 +4805,9 @@ function App() {
                       )}
                     </div>
                   )}
-                  <label>
-                    语速
-                    <select value={pptVideoSettings.speed} onChange={(event) => updatePptVideoSetting('speed', event.target.value)}>
-                      {pptVideoSpeedOptions.map((item) => <option key={item} value={item}>{item}{item === '1.0x' ? '（正常）' : ''}</option>)}
-                    </select>
-                  </label>
                 </div>
 
-                <div className="ppt-video-panel">
+                <div className="ppt-video-panel ppt-audio-panel">
                   <h3><Music size={15} /> 音频设置</h3>
                   <div className="ppt-bgm-row">
                     <span>BGM</span>
@@ -4836,7 +4838,7 @@ function App() {
                   </label>
                 </div>
 
-                <div className="ppt-video-panel">
+                <div className="ppt-video-panel ppt-output-panel">
                   <h3><Download size={15} /> 输出设置</h3>
                   <label>
                     分辨率
