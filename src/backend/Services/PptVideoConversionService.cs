@@ -562,12 +562,15 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
         if (string.IsNullOrWhiteSpace(text))
             return [];
 
+        if (HasDialogueLines(text))
+            return BuildDialogueSubtitleCues(text);
+
         text = Regex.Replace(text, @"\s+", " ").Trim();
 
         const int maxLen = 35;
         var cues = new List<string>();
 
-        foreach (var raw in Regex.Split(text, @"(?<=[。！？!?.;])"))
+        foreach (var raw in Regex.Split(text, @"(?<=[\u3002\uff01\uff1f!?.;])"))
         {
             var sentence = raw.Trim();
             if (sentence.Length == 0) continue;
@@ -579,7 +582,83 @@ public sealed class PptVideoConversionService(EdgeTtsClient ttsClient, IPptxThum
             }
 
             var current = "";
-            foreach (var part in Regex.Split(sentence, @"(?<=[，,、；：:])"))
+            foreach (var part in Regex.Split(sentence, @"(?<=[\uff0c,\u3001\uff1b\uff1a:])"))
+            {
+                var clause = part.Trim();
+                if (clause.Length == 0) continue;
+
+                if (current.Length > 0 && current.Length + clause.Length > maxLen)
+                {
+                    cues.Add(current);
+                    current = clause;
+                }
+                else
+                {
+                    current += clause;
+                }
+            }
+
+            if (current.Length > 0)
+            {
+                if (current.Length <= maxLen)
+                {
+                    cues.Add(current);
+                }
+                else
+                {
+                    for (var offset = 0; offset < current.Length; offset += maxLen)
+                        cues.Add(current[offset..Math.Min(offset + maxLen, current.Length)]);
+                }
+            }
+        }
+
+        return cues.Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
+    }
+
+    private static bool HasDialogueLines(string text)
+    {
+        return text.Split('\n')
+            .Any(line => TryParseDialogueLine(line.Trim(), out _, out _));
+    }
+
+    private static List<string> BuildDialogueSubtitleCues(string text)
+    {
+        var turns = ParseDialogueTurns(text);
+        var cues = new List<string>();
+        foreach (var turn in turns)
+        {
+            var speaker = NormalizeSpeaker(turn.Speaker);
+            var prefix = string.IsNullOrWhiteSpace(speaker) ? "" : $"{speaker}: ";
+            var maxTextLen = Math.Max(42 - prefix.Length, 18);
+            var parts = SplitSubtitleTextForDialogue(turn.Text, maxTextLen);
+            if (parts.Count == 0) continue;
+
+            for (var i = 0; i < parts.Count; i++)
+                cues.Add(i == 0 ? $"{prefix}{parts[i]}" : parts[i]);
+        }
+
+        return cues.Where(c => !string.IsNullOrWhiteSpace(c)).ToList();
+    }
+
+    private static List<string> SplitSubtitleTextForDialogue(string text, int maxLen)
+    {
+        maxLen = Math.Clamp(maxLen, 18, 48);
+        text = Regex.Replace(text, @"\s+", " ").Trim();
+        var cues = new List<string>();
+
+        foreach (var raw in Regex.Split(text, @"(?<=[\u3002\uff01\uff1f!?.;])"))
+        {
+            var sentence = raw.Trim();
+            if (sentence.Length == 0) continue;
+
+            if (sentence.Length <= maxLen)
+            {
+                cues.Add(sentence);
+                continue;
+            }
+
+            var current = "";
+            foreach (var part in Regex.Split(sentence, @"(?<=[\uff0c\u3001\uff1b,;])"))
             {
                 var clause = part.Trim();
                 if (clause.Length == 0) continue;

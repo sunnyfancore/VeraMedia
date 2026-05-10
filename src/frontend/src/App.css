@@ -1399,8 +1399,11 @@ button {
 .ppt-dialogue-role-voices {
   display: grid;
   gap: 6px;
+  max-height: 122px;
+  overflow: auto;
   border-top: 1px solid #eef2f7;
   padding-top: 6px;
+  padding-right: 2px;
 }
 
 .ppt-dialogue-role-voices label {
