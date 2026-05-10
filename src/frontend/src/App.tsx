@@ -317,6 +317,19 @@ const getPptDialogueVoiceForSpeaker = (
   return index % 2 === 0 ? settings.dialogueHostVoice : settings.dialogueGuestVoice
 }
 
+const isPptBuiltInDialogueSpeaker = (speaker: string) => {
+  const normalized = normalizePptDialogueSpeaker(speaker).toLowerCase()
+  return normalized.includes('\u65c1\u767d')
+    || normalized.includes('narrator')
+    || normalized.includes('\u4e3b\u6301')
+    || normalized.includes('\u4e3b\u8bb2')
+    || normalized.includes('host')
+    || normalized.includes('\u5609\u5bbe')
+    || normalized.includes('\u540c\u4e8b')
+    || normalized.includes('\u5ba2\u6237')
+    || normalized.includes('guest')
+}
+
 const buildPptVideoDialogueVoices = (
   slides: PptVideoSlide[],
   settings: PptVideoSettings,
@@ -667,14 +680,15 @@ function App() {
     : pptVideoProgressDetail || (!pptVideoPhase && !pptVideoStatus ? '就绪，等待操作...' : '')
   const pptVideoProgressTitle = `${pptVideoPhase || '处理进度'}${pptVideoProgressInlineDetail ? ` ${pptVideoProgressInlineDetail}` : ''}`
   const pptVideoDialogueSpeakers = detectPptDialogueSpeakers(pptVideoSlides)
-  const pptVideoDialogueSpeakerKey = pptVideoDialogueSpeakers.join('\u0001')
-  const pptVideoDialogueVoiceEntries = pptVideoDialogueSpeakers.map((speaker, index) => ({
+  const pptVideoCustomDialogueSpeakers = pptVideoDialogueSpeakers.filter((speaker) => !isPptBuiltInDialogueSpeaker(speaker))
+  const pptVideoCustomDialogueSpeakerKey = pptVideoCustomDialogueSpeakers.join('\u0001')
+  const pptVideoDialogueVoiceEntries = pptVideoCustomDialogueSpeakers.map((speaker, index) => ({
     speaker,
     voice: getPptDialogueVoiceForSpeaker(speaker, index, pptVideoSettings, pptVideoRoleVoices),
   }))
   useEffect(() => {
     setPptVideoRoleVoices((current) => {
-      const active = new Set(pptVideoDialogueSpeakers)
+      const active = new Set(pptVideoCustomDialogueSpeakers)
       let changed = false
       const next: Record<string, string> = {}
       for (const [speaker, voice] of Object.entries(current)) {
@@ -686,7 +700,7 @@ function App() {
       }
       return changed ? next : current
     })
-  }, [pptVideoDialogueSpeakerKey])
+  }, [pptVideoCustomDialogueSpeakerKey])
   const [articleVersions, setArticleVersions] = useState<ArticleVersion[] | null>(null)
   const [articleVersionTitle, setArticleVersionTitle] = useState('')
   const [articleVersionProjectId, setArticleVersionProjectId] = useState<number | null>(null)
