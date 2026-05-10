@@ -621,6 +621,7 @@ function App() {
   const [assetsLoading, setAssetsLoading] = useState(false)
   const [pptVideoBusy, setPptVideoBusy] = useState(false)
   const [pptVideoPreviewBusy, setPptVideoPreviewBusy] = useState(false)
+  const [pptVideoDialogueBusy, setPptVideoDialogueBusy] = useState(false)
   const [pptVideoStatus, setPptVideoStatus] = useState('')
   const [pptVideoPhase, setPptVideoPhase] = useState('')
   const [pptVideoFile, setPptVideoFile] = useState<File | null>(null)
@@ -2916,6 +2917,58 @@ function App() {
     setPptVideoSlides((current) => current.map((slide) => ({ ...slide, notes: createPptDialogueDraft(slide.notes) })))
   }
 
+  const generatePptVideoDialogueScript = async () => {
+    if (pptVideoSlides.length === 0) {
+      showToast('请先选择并读取 PPT')
+      return
+    }
+
+    setPptVideoDialogueBusy(true)
+    setPptVideoSettings((current) => ({ ...current, dubbingMode: 'dialogue' }))
+    try {
+      const response = await fetchWithAuth(`${API_BASE}/api/conversations/ppt-video/dialogue-script`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          style: '自然、专业、像两位真实讲解者在围绕页面内容交流',
+          slides: pptVideoSlides.map((slide) => ({
+            index: slide.index,
+            title: slide.title,
+            notes: slide.notes,
+          })),
+        }),
+      })
+      if (!response.ok) {
+        throw new Error(await readErrorMessage(response, '生成对话稿失败'))
+      }
+
+      const data = await response.json() as {
+        slides?: Array<{ index: number; notes?: string }>
+        aiGenerated?: boolean
+        message?: string
+      }
+      const notesBySlide = new Map((data.slides || [])
+        .filter((slide) => slide.index > 0 && slide.notes)
+        .map((slide) => [slide.index, slide.notes || '']))
+
+      if (notesBySlide.size === 0) {
+        throw new Error('没有生成可用的对话稿')
+      }
+
+      setPptVideoSlides((current) => current.map((slide) => ({
+        ...slide,
+        notes: notesBySlide.get(slide.index) || createPptDialogueDraft(slide.notes),
+      })))
+      showToast(data.message || (data.aiGenerated ? '已生成更自然的对话稿' : '已使用本地规则生成对话稿'), 6000)
+    } catch (error) {
+      setPptVideoSlides((current) => current.map((slide) => ({ ...slide, notes: createPptDialogueDraft(slide.notes) })))
+      const message = error instanceof Error ? error.message : '对话稿生成失败'
+      showToast(`${message}，已切换为本地对话稿`, 8000)
+    } finally {
+      setPptVideoDialogueBusy(false)
+    }
+  }
+
   const playVoiceSample = async () => {
     if (voiceSampleRef.current) {
       voiceSampleRef.current.pause()
@@ -4716,7 +4769,7 @@ function App() {
                       <option value="10">10 秒</option>
                     </select>
                   </label>
-                  <button className="ppt-convert-button" type="button" disabled={!pptVideoFile || pptVideoBusy || pptVideoPreviewBusy} onClick={() => void convertPptToVideo()}>
+                  <button className="ppt-convert-button" type="button" disabled={!pptVideoFile || pptVideoBusy || pptVideoPreviewBusy || pptVideoDialogueBusy} onClick={() => void convertPptToVideo()}>
                     {pptVideoBusy ? <span className="ppt-button-spinner" aria-hidden="true" /> : <Video size={15} />}
                     {pptVideoBusy ? '正在转换' : '开始转换'}
                   </button>
@@ -4732,7 +4785,11 @@ function App() {
                       {pptVideoDialogueSpeakers.length > 0 && (
                         <span className="ppt-dialogue-roles">角色：{pptVideoDialogueSpeakers.slice(0, 4).join('、')}{pptVideoDialogueSpeakers.length > 4 ? ` +${pptVideoDialogueSpeakers.length - 4}` : ''}</span>
                       )}
-                      <button type="button" onClick={convertAllPptVideoNotesToDialogue}>
+                      <button type="button" onClick={() => void generatePptVideoDialogueScript()} disabled={pptVideoDialogueBusy || pptVideoBusy || pptVideoPreviewBusy}>
+                        {pptVideoDialogueBusy ? <span className="ppt-button-spinner small" aria-hidden="true" /> : <Sparkles size={13} />}
+                        AI 优化对话稿
+                      </button>
+                      <button type="button" onClick={convertAllPptVideoNotesToDialogue} disabled={pptVideoDialogueBusy || pptVideoBusy || pptVideoPreviewBusy}>
                         <Users size={13} />
                         全部转对话
                       </button>
@@ -4768,7 +4825,7 @@ function App() {
                           <div className="ppt-notes-title-row">
                             <strong>{slide.title}</strong>
                             {pptVideoSettings.dubbingMode === 'dialogue' && (
-                              <button type="button" onClick={() => convertPptVideoSlideToDialogue(slide.index)}>
+                              <button type="button" onClick={() => convertPptVideoSlideToDialogue(slide.index)} disabled={pptVideoDialogueBusy || pptVideoBusy || pptVideoPreviewBusy}>
                                 <Users size={12} />
                                 转对话
                               </button>

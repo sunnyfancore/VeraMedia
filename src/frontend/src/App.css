@@ -1441,6 +1441,13 @@ button {
   animation: ppt-video-spin 0.8s linear infinite;
 }
 
+.ppt-button-spinner.small {
+  width: 13px;
+  height: 13px;
+  border-color: rgba(37, 99, 235, 0.24);
+  border-top-color: #2563eb;
+}
+
 .ppt-video-preview,
 .ppt-video-progress {
   border: 1px solid #e2e8f0;
@@ -1494,6 +1501,12 @@ button {
 .ppt-dialogue-actions button:hover,
 .ppt-notes-title-row button:hover {
   background: #dbeafe;
+}
+
+.ppt-dialogue-actions button:disabled,
+.ppt-notes-title-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .ppt-dialogue-roles {

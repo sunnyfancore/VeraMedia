@@ -1,5 +1,6 @@
 using System.Text;
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.IO.Compression;
 using DocumentFormat.OpenXml.Packaging;
@@ -41,6 +42,10 @@ public sealed class ConversationsController(
 {
     private const long MaxPptVideoUploadSize = 100 * 1024 * 1024;
     private sealed record PptVideoPreviewSlide(int Index, string Title, string Notes);
+    public sealed record PptVideoDialogueScriptSlide(int Index, string? Title, string? Notes);
+    public sealed record PptVideoDialogueScriptRequest(IReadOnlyList<PptVideoDialogueScriptSlide>? Slides, string? Style = null);
+    public sealed record PptVideoDialogueScriptResult(int Index, string Notes);
+    public sealed record PptVideoDialogueScriptResponse(IReadOnlyList<PptVideoDialogueScriptResult> Slides, bool AiGenerated, string Message);
 
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<ConversationSummary>>> List([FromQuery] int page = 1, [FromQuery] int pageSize = 80, CancellationToken cancellationToken = default)
@@ -206,6 +211,40 @@ public sealed class ConversationsController(
             || Regex.IsMatch(content, @"PPT_SPEC\s*[:：]\s*\{[\s\S]*?""slides""[\s\S]*?\}", RegexOptions.IgnoreCase);
     }
 
+    [HttpPost("ppt-video/dialogue-script")]
+    public async Task<IActionResult> GeneratePptVideoDialogueScript([FromBody] PptVideoDialogueScriptRequest request, CancellationToken cancellationToken)
+    {
+        var slides = request.Slides?
+            .Where(slide => slide.Index > 0)
+            .OrderBy(slide => slide.Index)
+            .Take(120)
+            .ToList() ?? [];
+
+        if (slides.Count == 0)
+            return BadRequest(new { message = "没有可转换的幻灯片备注。" });
+
+        try
+        {
+            var aiSlides = await TryGeneratePptDialogueScriptAsync(User.GetUserId(), slides, request.Style, cancellationToken);
+            if (aiSlides.Count > 0)
+            {
+                return Ok(new PptVideoDialogueScriptResponse(
+                    MergeDialogueScriptWithFallback(slides, aiSlides),
+                    true,
+                    "已生成更自然的对话配音稿。"));
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "AI dialogue script generation failed, using local fallback");
+        }
+
+        return Ok(new PptVideoDialogueScriptResponse(
+            BuildFallbackDialogueScripts(slides),
+            false,
+            "AI 生成暂不可用，已使用本地规则生成对话稿。"));
+    }
+
     [HttpPost("ppt-video")]
     [RequestSizeLimit(MaxPptVideoUploadSize)]
     public async Task<IActionResult> ConvertUploadedPptToVideo(
@@ -318,6 +357,204 @@ public sealed class ConversationsController(
         {
             return BadRequest(BuildPptVideoErrorResponse(ex));
         }
+    }
+
+    private async Task<IReadOnlyList<PptVideoDialogueScriptResult>> TryGeneratePptDialogueScriptAsync(
+        long userId,
+        IReadOnlyList<PptVideoDialogueScriptSlide> slides,
+        string? style,
+        CancellationToken cancellationToken)
+    {
+        var provider = await providerResolver.GetActiveProviderAsync(userId, cancellationToken);
+        var chatModel = providerResolver.GetEnabledModel(provider, AiModelTypes.Chat);
+        if (provider is null || chatModel is null || string.IsNullOrWhiteSpace(provider.ApiKey))
+            return [];
+
+        var payload = JsonSerializer.Serialize(new
+        {
+            style = string.IsNullOrWhiteSpace(style) ? "自然、专业、适合 PPT 视频讲解" : style.Trim(),
+            roles = new[] { "主持人", "嘉宾", "旁白" },
+            slides = slides.Select(slide => new
+            {
+                index = slide.Index,
+                title = slide.Title ?? "",
+                notes = slide.Notes ?? ""
+            })
+        });
+
+        var turns = new[]
+        {
+            new ChatTurn("system", string.Join(Environment.NewLine, [
+                "你是资深视频脚本医生，专门把 PPT 备注改写成自然、可信、信息密度适中的双人对话配音稿。",
+                "只输出严格 JSON，不要 Markdown，不要解释。",
+                "JSON 格式必须是：{\"slides\":[{\"index\":1,\"notes\":\"主持人：...\\n嘉宾：...\"}]}。",
+                "每页 notes 必须使用多行“角色：台词”。角色只能优先使用：主持人、嘉宾、旁白。",
+                "保留原备注事实，不编造数据、公司名、承诺或案例。",
+                "每页 2-6 句，口语自然，但不要闲聊；第一句承接页面标题，最后一句推进到下一页或总结重点。",
+                "如果原备注已经是对话，请润色节奏和表达，不要破坏角色结构。"
+            ])),
+            new ChatTurn("user", payload)
+        };
+
+        var options = new AgentOptionsDto(
+            "expert",
+            "business",
+            "json",
+            0.45m,
+            0,
+            false,
+            false,
+            Capability: "ppt",
+            CapabilityParams: new Dictionary<string, string>
+            {
+                ["pptMode"] = "PPT视频",
+                ["pptNarration"] = "对话配音"
+            });
+
+        var builder = new StringBuilder();
+        await foreach (var chunk in chatClient.StreamReplyAsync(provider, chatModel, turns, options, cancellationToken))
+        {
+            builder.Append(chunk);
+            if (builder.Length > 90000)
+                break;
+        }
+
+        return ParseDialogueScriptResponse(builder.ToString());
+    }
+
+    private static IReadOnlyList<PptVideoDialogueScriptResult> ParseDialogueScriptResponse(string content)
+    {
+        var json = ExtractJsonObject(content);
+        if (string.IsNullOrWhiteSpace(json))
+            return [];
+
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("slides", out var slidesElement) ||
+            slidesElement.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var result = new List<PptVideoDialogueScriptResult>();
+        foreach (var item in slidesElement.EnumerateArray())
+        {
+            if (!item.TryGetProperty("index", out var indexElement) ||
+                !indexElement.TryGetInt32(out var index) ||
+                index <= 0)
+                continue;
+
+            var notes = item.TryGetProperty("notes", out var notesElement) && notesElement.ValueKind == JsonValueKind.String
+                ? notesElement.GetString()
+                : null;
+            if (string.IsNullOrWhiteSpace(notes))
+                continue;
+
+            result.Add(new PptVideoDialogueScriptResult(index, NormalizeDialogueScript(notes)));
+        }
+
+        return result;
+    }
+
+    private static string ExtractJsonObject(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return "";
+
+        var fence = Regex.Match(content, @"```(?:json)?\s*(?<json>\{[\s\S]*?\})\s*```", RegexOptions.IgnoreCase);
+        if (fence.Success)
+            return fence.Groups["json"].Value.Trim();
+
+        var start = content.IndexOf('{');
+        var end = content.LastIndexOf('}');
+        return start >= 0 && end > start ? content[start..(end + 1)].Trim() : "";
+    }
+
+    private static IReadOnlyList<PptVideoDialogueScriptResult> MergeDialogueScriptWithFallback(
+        IReadOnlyList<PptVideoDialogueScriptSlide> source,
+        IReadOnlyList<PptVideoDialogueScriptResult> generated)
+    {
+        var generatedByIndex = generated
+            .GroupBy(item => item.Index)
+            .ToDictionary(group => group.Key, group => group.First().Notes);
+
+        return source.Select(slide => new PptVideoDialogueScriptResult(
+            slide.Index,
+            generatedByIndex.TryGetValue(slide.Index, out var notes) && !string.IsNullOrWhiteSpace(notes)
+                ? notes
+                : BuildFallbackDialogueScript(slide.Title ?? "", slide.Notes ?? ""))).ToList();
+    }
+
+    private static IReadOnlyList<PptVideoDialogueScriptResult> BuildFallbackDialogueScripts(IReadOnlyList<PptVideoDialogueScriptSlide> slides)
+    {
+        return slides.Select(slide => new PptVideoDialogueScriptResult(
+            slide.Index,
+            BuildFallbackDialogueScript(slide.Title ?? "", slide.Notes ?? ""))).ToList();
+    }
+
+    private static string BuildFallbackDialogueScript(string title, string notes)
+    {
+        notes = NormalizeDialogueScript(notes);
+        if (IsDialogueScript(notes))
+            return notes;
+
+        var sentences = SplitDialogueSentences(notes).ToList();
+        if (sentences.Count == 0)
+            return "";
+
+        var lines = new List<string>();
+        var cleanTitle = Regex.Replace(title ?? "", @"\s+", " ").Trim();
+        if (!string.IsNullOrWhiteSpace(cleanTitle))
+            lines.Add($"主持人：这一页我们看「{cleanTitle}」。");
+
+        for (var i = 0; i < sentences.Count; i++)
+        {
+            var role = i % 2 == 0 ? "主持人" : "嘉宾";
+            var text = sentences[i];
+            if (i == 0 && lines.Count > 0 && text.Contains(cleanTitle, StringComparison.OrdinalIgnoreCase))
+                lines[^1] = $"主持人：{text}";
+            else
+                lines.Add($"{role}：{text}");
+        }
+
+        if (lines.Count == 1)
+            lines.Add("嘉宾：这个点很关键，后面可以继续展开它对实际流程的影响。");
+
+        return string.Join(Environment.NewLine, lines.Take(8));
+    }
+
+    private static bool IsDialogueScript(string notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes)) return false;
+        return notes.Split('\n').Any(line => Regex.IsMatch(line.Trim(), @"^\s*(?:[-*]\s*)?[\p{L}\p{N}_\-\s]{1,24}\s*[\uFF1A:]\s*.+$"));
+    }
+
+    private static IEnumerable<string> SplitDialogueSentences(string notes)
+    {
+        notes = Regex.Replace(notes ?? "", @"\s+", " ").Trim();
+        if (string.IsNullOrWhiteSpace(notes)) yield break;
+
+        foreach (var part in Regex.Split(notes, @"(?<=[。！？!?；;])\s*"))
+        {
+            var sentence = part.Trim();
+            if (sentence.Length == 0) continue;
+            if (sentence.Length <= 90)
+            {
+                yield return sentence;
+                continue;
+            }
+
+            for (var offset = 0; offset < sentence.Length; offset += 70)
+                yield return sentence[offset..Math.Min(offset + 70, sentence.Length)];
+        }
+    }
+
+    private static string NormalizeDialogueScript(string notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes)) return "";
+
+        return string.Join(Environment.NewLine, notes
+            .Replace("\r", "")
+            .Split('\n')
+            .Select(line => Regex.Replace(line, @"\s+", " ").Trim())
+            .Where(line => !string.IsNullOrWhiteSpace(line)))
+            .Trim();
     }
 
     [HttpGet("ppt-video/{taskId}/status")]
