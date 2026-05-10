@@ -262,11 +262,11 @@ public sealed partial class OfficeExportService : IOfficeExportService
                     new A.Accent6Color(new A.RgbColorModelHex { Val = "EF4444" }),
                     new A.Hyperlink(new A.RgbColorModelHex { Val = "155EEF" }),
                     new A.FollowedHyperlinkColor(new A.RgbColorModelHex { Val = "7C3AED" }))
-                { Name = "VeraMedia" },
+                { Name = "Presentation" },
                 new A.FontScheme(
                     new A.MajorFont(new A.LatinFont { Typeface = "Aptos Display" }, new A.EastAsianFont { Typeface = "Microsoft YaHei" }, new A.ComplexScriptFont { Typeface = "Arial" }),
                     new A.MinorFont(new A.LatinFont { Typeface = "Aptos" }, new A.EastAsianFont { Typeface = "Microsoft YaHei" }, new A.ComplexScriptFont { Typeface = "Arial" }))
-                { Name = "VeraMedia" },
+                { Name = "Presentation" },
                 new A.FormatScheme(
                     new A.FillStyleList(
                         new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
@@ -281,8 +281,8 @@ public sealed partial class OfficeExportService : IOfficeExportService
                         new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
                         new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
                         new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })))
-                { Name = "VeraMedia" }))
-        { Name = "VeraMedia Theme" };
+                { Name = "Presentation" }))
+        { Name = "Presentation Theme" };
         themePart.Theme.Save();
 
         slideLayoutPart.SlideLayout = new P.SlideLayout(
@@ -362,7 +362,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 new P.ApplicationNonVisualDrawingProperties()),
             new P.GroupShapeProperties(new A.TransformGroup()));
 
-        var layout = (slide.Layout ?? "").Trim().ToLowerInvariant();
+        var layout = ResolveCreativeLayoutIntent(slide, index);
         if (!slide.IsCover && IsComparisonSlide(slide))
         {
             layout = "comparison";
@@ -438,8 +438,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 shapeTree.Append(CreateTextShape((uint)(22 + i * 4), $"Agenda No Text {i}", $"{i + 1}", 1195000, y + 130000, 180000, 240000, 1100, true, false, fontColor: "FFFFFF"));
                 shapeTree.Append(CreateTextShape((uint)(23 + i * 4), $"Agenda Text {i}", items[i], 1700000, y + 95000, 8600000, 310000, 1260, true, false, fontColor: palette.Body));
             }
-            shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
-            shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
+            AddPageNumber(shapeTree, index, total, 91, palette.Muted);
         }
         else if (layout.Contains("quote"))
         {
@@ -455,8 +454,131 @@ public sealed partial class OfficeExportService : IOfficeExportService
             {
                 shapeTree.Append(CreatePictureShape(16, "Quote Image", 8800000, 1500000, 2800000, 2800000, imageRelId, 1400000));
             }
-            shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: "94A3B8"));
-            shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: "94A3B8"));
+            AddPageNumber(shapeTree, index, total, 91, "94A3B8");
+        }
+        else if (!layout.Contains("big-number") && !layout.Contains("number-focus") && !layout.Contains("metric-focus") && !layout.Contains("hero-metric")
+            && (layout.Contains("hero") || layout.Contains("spotlight") || layout.Contains("cinematic") || layout.Contains("magazine") || layout.Contains("statement")))
+        {
+            shapeTree.Append(CreateGradientRectShape(2, "Background", 0, 0, 12192000, 6858000, palette.DarkBackground, palette.DarkPanel, gradAngle));
+            AddSlideDecorations(shapeTree, palette, index, 95, true);
+            shapeTree.Append(CreateRectShape(4, "Vertical Accent", 760000, 980000, 90000, 980000, palette.Accent));
+            shapeTree.Append(CreateTextShape(5, "Title", slide.Title, 1040000, 850000, 6900000, 1560000, 3300, true, false, fontColor: "FFFFFF"));
+            var leadCopy = string.IsNullOrWhiteSpace(slide.Subtitle) ? BuildLeadCopy(slide, 88) : slide.Subtitle;
+            shapeTree.Append(CreateTextShape(6, "Lead", leadCopy, 1060000, 2560000, 6100000, 850000, 1440, false, false, fontColor: "CBD5E1"));
+
+            if (imageRelId != null)
+            {
+                shapeTree.Append(CreatePictureShape(16, "Hero Image", 7600000, 780000, 3700000, 4380000, imageRelId, 16000));
+            }
+            else
+            {
+                shapeTree.Append(CreateRoundedRectShape(16, "Hero Panel", 7600000, 780000, 3700000, 4380000, palette.DarkLine, "", 16000));
+                shapeTree.Append(CreateEllipseShape(17, "Hero Glow", 8350000, 1280000, 2500000, 2500000, palette.Secondary, 18));
+                shapeTree.Append(CreateTextShape(18, "Hero Keyword", ExtractHeroKeyword(slide), 7980000, 2440000, 2950000, 700000, 2600, true, false, fontColor: "FFFFFF"));
+            }
+
+            var chips = BuildDisplayItems(slide, 3);
+            for (var i = 0; i < chips.Count; i++)
+            {
+                var x = 1060000L + i * 2130000L;
+                var accent = i % 3 == 0 ? palette.Accent : i % 3 == 1 ? palette.Secondary : palette.Warm;
+                shapeTree.Append(CreateRoundedRectShape((uint)(30 + i * 4), $"Hero Chip {i}", x, 4400000, 1860000, 820000, palette.DarkPanel, palette.DarkLine, 9000));
+                shapeTree.Append(CreateRectShape((uint)(31 + i * 4), $"Hero Chip Accent {i}", x + 140000, 4400000, 1580000, 65000, accent));
+                shapeTree.Append(CreateTextShape((uint)(32 + i * 4), $"Hero Chip No {i}", $"{i + 1:00}", x + 210000, 4640000, 430000, 260000, 1080, true, false, fontColor: accent));
+                shapeTree.Append(CreateTextShape((uint)(33 + i * 4), $"Hero Chip Text {i}", ClampCardText(chips[i], 30), x + 650000, 4580000, 1120000, 430000, 1020, true, false, fontColor: "F8FAFC"));
+            }
+
+            AddPageNumber(shapeTree, index, total, 91, "94A3B8");
+        }
+        else if (layout.Contains("big-number") || layout.Contains("big number") || layout.Contains("number-focus") || layout.Contains("metric-focus") || layout.Contains("impact"))
+        {
+            shapeTree.Append(CreateRectShape(2, "Background", 0, 0, 12192000, 6858000, palette.LightBackground));
+            shapeTree.Append(CreateGradientRectShape(3, "Side Wash", 0, 0, 5300000, 6858000, palette.SoftAccent, palette.LightBackground, 0));
+            AddSlideDecorations(shapeTree, palette, index, 95, false);
+            var items = BuildDisplayItems(slide, 5);
+            var heroValue = ExtractHeroMetric(slide, items);
+            shapeTree.Append(CreateTextShape(5, "Kicker", slide.Title, 720000, 650000, 5200000, 720000, 1900, true, false, fontColor: palette.Title));
+            shapeTree.Append(CreateTextShape(6, "Hero Metric", heroValue, 700000, 1660000, 4700000, 1380000, heroValue.Length <= 6 ? 6200 : 3900, true, false, fontColor: palette.Accent));
+            var metricCopy = items.Count > 0 ? ClampCardText(items[0], 70) : BuildLeadCopy(slide, 70);
+            shapeTree.Append(CreateTextShape(7, "Metric Copy", metricCopy, 760000, 3300000, 4400000, 900000, 1450, false, false, fontColor: palette.Body));
+
+            var cards = items.Skip(1).DefaultIfEmpty(slide.Subtitle).Where(x => !string.IsNullOrWhiteSpace(x)).Take(4).ToList();
+            for (var i = 0; i < cards.Count; i++)
+            {
+                var y = 1260000L + i * 1060000L;
+                var accent = i % 3 == 0 ? palette.Secondary : i % 3 == 1 ? palette.Accent : palette.Warm;
+                shapeTree.Append(CreateRoundedRectShape((uint)(20 + i * 4), $"Metric Detail {i}", 6020000, y, 4700000, 820000, "FFFFFF", palette.Line, 8000));
+                shapeTree.Append(CreateRectShape((uint)(21 + i * 4), $"Metric Detail Accent {i}", 6020000, y, 70000, 820000, accent));
+                shapeTree.Append(CreateTextShape((uint)(22 + i * 4), $"Metric Detail Text {i}", ClampCardText(cards[i], 56), 6300000, y + 180000, 4200000, 420000, 1160, true, false, fontColor: palette.Body));
+            }
+
+            AddPageNumber(shapeTree, index, total, 91, palette.Muted);
+        }
+        else if (layout.Contains("matrix") || layout.Contains("quadrant") || layout.Contains("2x2") || layout.Contains("\u56DB\u8C61\u9650") || layout.Contains("\u77E9\u9635"))
+        {
+            shapeTree.Append(CreateRectShape(2, "Background", 0, 0, 12192000, 6858000, palette.LightBackground));
+            shapeTree.Append(CreateGradientRectShape(3, "Top Bar", 0, 0, 12192000, 220000, palette.Accent, palette.Secondary, 0));
+            AddSlideDecorations(shapeTree, palette, index, 95, false);
+            shapeTree.Append(CreateTextShape(5, "Title", slide.Title, 760000, 510000, 10300000, 740000, 2500, true, false, fontColor: palette.Title));
+            if (!string.IsNullOrWhiteSpace(slide.Subtitle))
+            {
+                shapeTree.Append(CreateTextShape(6, "Subtitle", slide.Subtitle, 780000, 1190000, 10200000, 390000, 1180, false, false, fontColor: palette.Muted));
+            }
+
+            var matrixItems = BuildDisplayItems(slide, 4);
+            while (matrixItems.Count < 4)
+            {
+                matrixItems.Add(BuildLeadCopy(slide, 46));
+            }
+
+            var matrixX = 820000L;
+            var matrixY = string.IsNullOrWhiteSpace(slide.Subtitle) ? 1460000L : 1640000L;
+            var cardW = 5050000L;
+            var cardH = 1780000L;
+            var gapX = 340000L;
+            var gapY = 250000L;
+            var fills = new[] { "FFFFFF", palette.Card, palette.SoftSecondary, palette.SoftWarm };
+            var accents = new[] { palette.Accent, palette.Secondary, palette.Warm, palette.Accent };
+            for (var i = 0; i < 4; i++)
+            {
+                var col = i % 2;
+                var row = i / 2;
+                var x = matrixX + col * (cardW + gapX);
+                var y = matrixY + row * (cardH + gapY);
+                shapeTree.Append(CreateRoundedRectShape((uint)(20 + i * 5), $"Matrix Cell {i}", x, y, cardW, cardH, fills[i], palette.Line, 9000));
+                shapeTree.Append(CreateRectShape((uint)(21 + i * 5), $"Matrix Accent {i}", x, y, cardW, 85000, accents[i]));
+                shapeTree.Append(CreateTextShape((uint)(22 + i * 5), $"Matrix No {i}", $"{i + 1:00}", x + 250000, y + 280000, 520000, 320000, 1180, true, false, fontColor: accents[i]));
+                shapeTree.Append(CreateTextShape((uint)(23 + i * 5), $"Matrix Text {i}", ClampCardText(matrixItems[i], 72), x + 900000, y + 280000, cardW - 1240000, 980000, 1260, true, false, fontColor: palette.Body));
+            }
+
+            AddPageNumber(shapeTree, index, total, 91, palette.Muted);
+        }
+        else if (layout.Contains("dashboard") || layout.Contains("panel") || layout.Contains("console") || layout.Contains("\u4EEA\u8868\u76D8") || layout.Contains("\u770B\u677F"))
+        {
+            shapeTree.Append(CreateGradientRectShape(2, "Background", 0, 0, 12192000, 6858000, palette.DarkBackground, palette.DarkPanel, gradAngle));
+            shapeTree.Append(CreateRectShape(3, "Top Accent", 0, 0, 12192000, 180000, palette.Secondary));
+            AddSlideDecorations(shapeTree, palette, index, 95, true);
+            shapeTree.Append(CreateTextShape(5, "Title", slide.Title, 760000, 520000, 9900000, 680000, 2450, true, false, fontColor: "FFFFFF"));
+            var panels = BuildDisplayItems(slide, 6);
+            var panelSpecs = new[]
+            {
+                (X: 780000L, Y: 1480000L, W: 3300000L, H: 1580000L),
+                (X: 4380000L, Y: 1480000L, W: 3300000L, H: 1580000L),
+                (X: 7980000L, Y: 1480000L, W: 3300000L, H: 1580000L),
+                (X: 780000L, Y: 3380000L, W: 5100000L, H: 1780000L),
+                (X: 6200000L, Y: 3380000L, W: 5080000L, H: 1780000L)
+            };
+            for (var i = 0; i < Math.Min(panels.Count, panelSpecs.Length); i++)
+            {
+                var spec = panelSpecs[i];
+                var accent = i % 3 == 0 ? palette.Accent : i % 3 == 1 ? palette.Secondary : palette.Warm;
+                shapeTree.Append(CreateRoundedRectShape((uint)(20 + i * 5), $"Dashboard Panel {i}", spec.X, spec.Y, spec.W, spec.H, palette.DarkPanel, palette.DarkLine, 9000));
+                shapeTree.Append(CreateRectShape((uint)(21 + i * 5), $"Dashboard Accent {i}", spec.X + 160000, spec.Y, spec.W - 320000, 70000, accent));
+                shapeTree.Append(CreateTextShape((uint)(22 + i * 5), $"Dashboard Label {i}", $"{i + 1:00}", spec.X + 260000, spec.Y + 260000, 560000, 300000, 1080, true, false, fontColor: accent));
+                shapeTree.Append(CreateTextShape((uint)(23 + i * 5), $"Dashboard Text {i}", ClampCardText(panels[i], spec.W > 4000000 ? 84 : 48), spec.X + 880000, spec.Y + 250000, spec.W - 1160000, spec.H - 520000, spec.W > 4000000 ? 1260 : 1120, true, false, fontColor: "F8FAFC"));
+            }
+
+            AddPageNumber(shapeTree, index, total, 91, "94A3B8");
         }
         else if (layout.Contains("stats") || layout.Contains("metrics") || layout.Contains("kpi"))
         {
@@ -486,8 +608,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                     shapeTree.Append(CreateTextShape((uint)(24 + i * 5), $"Stat Desc {i}", slide.Items[metrics.Count + i], x + 200000, 4100000, cardW - 400000, 1000000, 1100, false, false, fontColor: palette.Body));
                 }
             }
-            shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
-            shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
+            AddPageNumber(shapeTree, index, total, 91, palette.Muted);
         }
         else if (layout.Contains("summary"))
         {
@@ -508,8 +629,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 shapeTree.Append(CreateRectShape((uint)(21 + i * 3), $"Summary Accent {i}", x + 150000, y, 3000000, 80000, accent));
                 shapeTree.Append(CreateTextShape((uint)(22 + i * 3), $"Summary Text {i}", summaryItems[i], x + 240000, y + 260000, 2860000, 760000, 1280, true, false, fontColor: palette.Body));
             }
-            shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
-            shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
+            AddPageNumber(shapeTree, index, total, 91, palette.Muted);
         }
         else if (layout.Contains("comparison"))
         {
@@ -527,8 +647,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
             var conclusion = BuildComparisonConclusion(slide);
             shapeTree.Append(CreateRoundedRectShape(78, "Conclusion Band", 780000, 5630000, 10180000, 520000, palette.DarkPanel, "", 8000));
             shapeTree.Append(CreateTextShape(79, "Conclusion", conclusion, 1120000, 5760000, 9400000, 260000, 1220, true, false, fontColor: "FFFFFF"));
-            shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
-            shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
+            AddPageNumber(shapeTree, index, total, 91, palette.Muted);
         }
         else if (layout.Contains("two-column") || layout.Contains("compare") || layout.Contains("comparison"))
         {
@@ -562,8 +681,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 shapeTree.Append(CreateTextShape(11, "Left Body", left, 1120000, y + 420000, 4480000, 2840000, 1360, false, true, fontColor: palette.Body));
                 shapeTree.Append(CreateTextShape(12, "Right Body", right, 6640000, y + 420000, 4480000, 2840000, 1360, false, true, fontColor: palette.Body));
             }
-            shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
-            shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
+            AddPageNumber(shapeTree, index, total, 91, palette.Muted);
         }
         else if (layout.Contains("process") || layout.Contains("timeline"))
         {
@@ -601,8 +719,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 shapeTree.Append(CreateRoundedRectShape((uint)(idBase + 2), $"Step Card {i}", x - 340000, stepY + 900000, 1360000, 1550000, "FFFFFF", palette.Line));
                 shapeTree.Append(CreateTextShape((uint)(idBase + 3), $"Step Text {i}", steps[i], x - 180000, stepY + 1120000, 1040000, 1050000, 1050, true, false, fontColor: palette.Body));
             }
-            shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
-            shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
+            AddPageNumber(shapeTree, index, total, 91, palette.Muted);
         }
         else if (layout.Contains("data-card"))
         {
@@ -626,8 +743,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 shapeTree.Append(CreateTextShape((uint)(32 + i * 4), $"Data Label {i}", $"0{i + 1}", x + 330000, cardY + 270000, 700000, 350000, 1250, true, false, fontColor: accent));
                 shapeTree.Append(CreateTextShape((uint)(33 + i * 4), $"Data Text {i}", cards[i], x + 1150000, cardY + 300000, 3300000, 980000, 1280, true, false, fontColor: "F8FAFC"));
             }
-            shapeTree.Append(CreateTextShape(90, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: "94A3B8"));
-            shapeTree.Append(CreateTextShape(91, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: "94A3B8"));
+            AddPageNumber(shapeTree, index, total, 91, "94A3B8");
         }
         else if (layout.Length == 0 || layout.Contains("title-content"))
         {
@@ -664,8 +780,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 AddInsightGrid(shapeTree, bodyItems, 720000, bodyY - 110000, 10600000, 4350000, palette, 20, index);
             }
 
-            shapeTree.Append(CreateTextShape(12, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
-            shapeTree.Append(CreateTextShape(13, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
+            AddPageNumber(shapeTree, index, total, 13, palette.Muted);
         }
         else
         {
@@ -694,8 +809,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
                 AddInsightGrid(shapeTree, bodyItems, 720000, bodyY - 110000, 10600000, 4350000, palette, 20, index);
             }
 
-            shapeTree.Append(CreateTextShape(12, "Footer", "VeraMedia AI Workspace", 760000, 6260000, 3300000, 260000, 900, false, false, fontColor: palette.Muted));
-            shapeTree.Append(CreateTextShape(13, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: palette.Muted));
+            AddPageNumber(shapeTree, index, total, 13, palette.Muted);
         }
 
         return new P.Slide(new P.CommonSlideData(shapeTree), new P.ColorMapOverride(new A.MasterColorMapping()));
@@ -716,6 +830,118 @@ public sealed partial class OfficeExportService : IOfficeExportService
             new P.CommonSlideData(shapeTree),
             new P.ColorMapOverride(new A.MasterColorMapping()));
         notesPart.NotesSlide.Save();
+    }
+
+    private static void AddPageNumber(P.ShapeTree shapeTree, int index, int total, uint id, string fontColor)
+    {
+        shapeTree.Append(CreateTextShape(id, "Page Number", $"{Math.Min(index + 1, total)}/{total}", 10800000, 6260000, 700000, 260000, 900, false, false, fontColor: fontColor));
+    }
+
+    private static string ResolveCreativeLayoutIntent(SlideDraft slide, int index)
+    {
+        var layout = (slide.Layout ?? "").Trim().ToLowerInvariant();
+        var visual = (slide.Visual ?? "").Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(layout))
+        {
+            layout = "title-content";
+        }
+        var intent = $"{layout} {visual}";
+
+        if (HasAny(intent, "big-number", "big number", "number-focus", "metric-focus", "hero-metric", "\u5927\u6570\u5B57", "\u5173\u952E\u6570\u5B57"))
+        {
+            return $"{layout} big-number impact";
+        }
+
+        if (HasAny(intent, "matrix", "quadrant", "2x2", "\u56DB\u8C61\u9650", "\u77E9\u9635"))
+        {
+            return $"{layout} matrix quadrant";
+        }
+
+        if (HasAny(intent, "dashboard", "panel", "console", "\u4EEA\u8868\u76D8", "\u770B\u677F", "\u6570\u636E\u5C4F"))
+        {
+            return $"{layout} dashboard panel";
+        }
+
+        if (HasAny(intent, "hero", "spotlight", "cinematic", "magazine", "statement", "impact", "\u4E3B\u89C6\u89C9", "\u89C6\u89C9\u7126\u70B9", "\u6742\u5FD7", "\u51B2\u51FB"))
+        {
+            return $"{layout} hero spotlight";
+        }
+
+        if (HasAny(intent, "comparison", "compare", "\u5BF9\u6BD4", "\u6BD4\u8F83", "\u7248\u672C"))
+        {
+            return $"{layout} comparison";
+        }
+
+        if (HasAny(intent, "process", "timeline", "roadmap", "\u6D41\u7A0B", "\u8DEF\u5F84", "\u65F6\u95F4\u7EBF"))
+        {
+            return $"{layout} process timeline";
+        }
+
+        if (HasAny(intent, "split", "narrative", "dual", "story", "scene", "journey", "\u5206\u955C", "\u573A\u666F", "\u53D9\u4E8B", "\u53CC\u680F"))
+        {
+            return $"{layout} two-column";
+        }
+
+        if (HasAny(layout, "cover", "section", "agenda", "contents", "summary", "quote", "stats", "metrics", "kpi", "data-card", "two-column", "title-content"))
+        {
+            return intent;
+        }
+
+        var authoredItems = slide.Items.Count(x => !string.IsNullOrWhiteSpace(x));
+        var hash = HashCode.Combine(layout, visual, slide.Title, index);
+        var selector = Math.Abs(hash % 5);
+        var adaptive = selector switch
+        {
+            0 => "hero spotlight",
+            1 => authoredItems >= 4 ? "matrix quadrant" : "big-number impact",
+            2 => "dashboard panel",
+            3 => "big-number impact",
+            _ => authoredItems >= 5 ? "summary" : "hero spotlight"
+        };
+
+        return $"{layout} {visual} {adaptive}";
+    }
+
+    private static bool HasAny(string text, params string[] needles)
+    {
+        return needles.Any(x => text.Contains(x, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string BuildLeadCopy(SlideDraft slide, int maxLength)
+    {
+        var candidate = slide.Items
+            .Concat(ExtractVisualFragments(slide.Visual, 2))
+            .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            candidate = string.IsNullOrWhiteSpace(slide.Subtitle) ? slide.Title : slide.Subtitle;
+        }
+
+        return ClampCardText(candidate, maxLength);
+    }
+
+    private static string ExtractHeroKeyword(SlideDraft slide)
+    {
+        var source = slide.Items.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x)) ?? slide.Title;
+        var label = ExtractLeadingLabel(source);
+        return ClampCardText(label, 12);
+    }
+
+    private static string ExtractHeroMetric(SlideDraft slide, IReadOnlyList<string> items)
+    {
+        var candidates = items.Prepend(slide.Title).Concat([slide.Subtitle]);
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate)) continue;
+            var match = Regex.Match(candidate, @"[\d０-９]+(?:[.,，]\d+)?\s*(?:%|％|x|X|倍|个|项|天|分钟|min|ms|s|万|亿)?");
+            if (match.Success)
+            {
+                return match.Value.Trim();
+            }
+        }
+
+        return ExtractHeroKeyword(slide);
     }
 
     private static P.Shape CreateRectShape(uint id, string name, long x, long y, long cx, long cy, string fillColor, string lineColor = "")
@@ -739,7 +965,13 @@ public sealed partial class OfficeExportService : IOfficeExportService
 
     private static P.Shape CreateTextShape(uint id, string name, string text, long x, long y, long cx, long cy, int fontSize, bool bold, bool bullet, string fontColor = "101828")
     {
-        var paragraphs = text.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        if (lines.Length == 0)
+        {
+            lines = [" "];
+        }
+
+        var paragraphs = lines
             .Select(line => CreateDrawingParagraph(line, bullet, fontSize, bold, fontColor))
             .ToArray();
 
@@ -1117,7 +1349,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
         }
 
         var blocks = ParseBlocks(markdown).Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
-        var slides = new List<SlideDraft> { new(title, "Generated from VeraMedia", ["Generated from VeraMedia"], "", "", "", "商务精美", true) };
+        var slides = new List<SlideDraft> { new(title, "", [], "", "", "", "商务精美", true) };
         var currentTitle = title;
         var currentItems = new List<string>();
         var currentNotes = new List<string>();
@@ -1191,7 +1423,7 @@ public sealed partial class OfficeExportService : IOfficeExportService
             }
 
             var result = new List<SlideDraft>();
-            var coverSubtitle = ReadString(root, "subtitle") ?? ReadString(root, "audience") ?? "Generated from VeraMedia";
+            var coverSubtitle = ReadString(root, "subtitle") ?? ReadString(root, "audience") ?? "";
             result.Add(new SlideDraft(title, coverSubtitle, [coverSubtitle], "cover", "", BuildDefaultNotes(title, [coverSubtitle]), theme, true));
 
             foreach (var slide in slideArray.EnumerateArray().Take(36))
@@ -1503,6 +1735,10 @@ public sealed partial class OfficeExportService : IOfficeExportService
         if (value.Contains("cover")) return "cover";
         if (value.Contains("section")) return "section";
         if (value.Contains("agenda") || value.Contains("contents") || value.Contains("目录")) return "agenda";
+        if (value.Contains("hero") || value.Contains("spotlight") || value.Contains("cinematic") || value.Contains("magazine") || value.Contains("statement") || value.Contains("主视觉") || value.Contains("视觉焦点") || value.Contains("杂志")) return value;
+        if (value.Contains("matrix") || value.Contains("quadrant") || value.Contains("2x2") || value.Contains("四象限") || value.Contains("矩阵")) return value;
+        if (value.Contains("dashboard") || value.Contains("panel") || value.Contains("console") || value.Contains("仪表盘") || value.Contains("看板")) return value;
+        if (value.Contains("big-number") || value.Contains("big number") || value.Contains("number-focus") || value.Contains("metric-focus") || value.Contains("大数字") || value.Contains("关键数字")) return value;
         if (value.Contains("summary")) return "summary";
         if (value.Contains("quote")) return "quote";
         if (value.Contains("stats") || value.Contains("metrics") || value.Contains("kpi")) return "stats";
@@ -1511,13 +1747,13 @@ public sealed partial class OfficeExportService : IOfficeExportService
         if (value.Contains("timeline")) return "timeline";
         if (value.Contains("compare") || value.Contains("comparison") || value.Contains("\u5BF9\u6BD4") || value.Contains("\u6BD4\u8F83") || value.Contains("\u7248\u672C")) return "comparison";
         if (value.Contains("two-column")) return "two-column";
-        return "title-content";
+        return string.IsNullOrWhiteSpace(value) ? "title-content" : value;
     }
 
     private static string BuildFileName(string title, string extension)
     {
         var cleaned = SanitizeFileNameStem(title);
-        if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "VeraMedia";
+        if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "presentation";
         return $"{cleaned[..Math.Min(cleaned.Length, 48)].Trim()}.{extension.TrimStart('.')}";
     }
 

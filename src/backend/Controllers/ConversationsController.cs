@@ -85,7 +85,7 @@ public sealed class ConversationsController(
             return BadRequest(new { message = "这条消息还没有可导出的内容。" });
         }
 
-        var title = message.Conversation?.Title ?? "VeraMedia";
+        var title = message.Conversation?.Title ?? "演示文稿";
         if (string.Equals(format, "mp4", StringComparison.OrdinalIgnoreCase))
         {
             var pptContent = await EnsureAiPptSpecForExportAsync(userId, title, message.Content, cancellationToken);
@@ -113,7 +113,7 @@ public sealed class ConversationsController(
         if (string.IsNullOrWhiteSpace(message.Content))
             return BadRequest(new { message = "这条消息还没有可导出的内容。" });
 
-        var title = message.Conversation?.Title ?? "VeraMedia";
+        var title = message.Conversation?.Title ?? "演示文稿";
         var pptContent = await EnsureAiPptSpecForExportAsync(userId, title, message.Content, cancellationToken);
 
         var workDir = Path.Combine(Path.GetTempPath(), "veramedia-ppt-video-msg", Guid.NewGuid().ToString("N"));
@@ -169,12 +169,13 @@ public sealed class ConversationsController(
             new ChatTurn("system", string.Join(Environment.NewLine, [
                 "你是资深 PPT 创意总监与视觉设计师。你的任务不是总结文章，而是把内容制作成可直接导出的高端成品级 PPT 规格。",
                 "请只输出一个 fenced code block，语言标记必须是 ppt-spec，里面是严格 JSON。",
-                "JSON 格式：{\"title\":\"整套PPT标题\",\"subtitle\":\"副标题\",\"audience\":\"受众\",\"theme\":\"自定义高级主题名\",\"design\":{\"style\":\"视觉风格与质感\",\"palette\":\"色彩、光感、材质建议\",\"motif\":\"贯穿全稿的视觉母题\",\"composition\":\"版式语言与画面节奏\"},\"slides\":[{\"title\":\"页标题\",\"subtitle\":\"可选副标题\",\"layout\":\"cover/agenda/section/title-content/two-column/data-card/process/timeline/quote/stats/summary 或语义化变体\",\"bullets\":[\"短要点\"],\"visual\":\"这一页具体如何画：主视觉、图表、卡片、流程、对比矩阵、场景图、视觉隐喻、动线和留白\",\"notes\":\"可直接放入备注区的演讲稿\"}]}",
-                "制作要求：不要照抄固定模板；根据内容选择问题洞察、产品发布、咨询报告、品牌叙事、数据叙事或战役提案等更合适的结构。",
+                "JSON 格式：{\"title\":\"整套PPT标题\",\"subtitle\":\"副标题\",\"audience\":\"受众\",\"theme\":\"自定义高级主题名\",\"design\":{\"style\":\"视觉风格与质感\",\"palette\":\"色彩、光感、材质建议\",\"motif\":\"贯穿全稿的视觉母题\",\"composition\":\"版式语言与画面节奏\"},\"slides\":[{\"title\":\"页标题\",\"subtitle\":\"可选副标题\",\"layout\":\"AI 自创版式标签，例如 cinematic-opening / hero-metric / 2x2-risk-matrix / dashboard-panel / split-narrative\",\"bullets\":[\"短要点\"],\"visual\":\"这一页具体如何画：主视觉、图表、卡片、流程、对比矩阵、场景图、视觉隐喻、动线和留白\",\"notes\":\"可直接放入备注区的演讲稿\"}]}",
+                "制作要求：不要照抄固定模板；根据内容选择问题洞察、产品发布、咨询报告、品牌叙事、数据叙事或战役提案等更合适的结构。layout 不从固定列表选择，请每页自创语义化版式名。",
                 "封面要有明确主张，目录不是必须；如果目录会降低高级感，可以用章节引导页、场景页或问题页替代。",
+                "PPT 页面内容、备注和可见文案不要出现平台品牌名或固定工作区脚注，除非用户明确要求。",
                 "每页只表达一个核心判断；bullets 控制在 2-5 条，写结论、证据、数字或行动项；visual 必须像设计 brief，不能写“配图即可”。",
                 "bullets 是最终 PPT 页面上直接展示给客户看的业务内容，禁止写“右侧加结论卡片”“对比表用绿色勾选”“使用某某图标”等排版指令；排版和视觉说明只能写在 visual。",
-                "允许大胆留白、强对比、大数字、全幅场景、杂志式标题、咨询级框架图、发布会式视觉焦点。notes 要与页面内容同步，方便 PPT 转视频配音。",
+                "允许大胆留白、强对比、大数字、全幅场景、杂志式标题、咨询级框架图、发布会式视觉焦点。visual 要写清主体图形、信息区比例、视觉重心和动线；notes 要与页面内容同步，方便 PPT 转视频配音。",
                 "不要输出 Markdown 大纲、不要解释、不要把 JSON 拆散。"
             ])),
             new ChatTurn("user", $"请将以下内容制作成精美 PPT 规格。标题参考：{title}\n\n{content}")
@@ -1103,7 +1104,7 @@ public sealed class ConversationsController(
         }
 
         var cleaned = Regex.Replace(builder.ToString(), @"\s+", " ").Trim(' ', '-', '_', '.');
-        if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "VeraMedia";
+        if (string.IsNullOrWhiteSpace(cleaned)) cleaned = "presentation";
         return $"{cleaned[..Math.Min(cleaned.Length, 48)].Trim()}.{extension.TrimStart('.')}";
     }
 
