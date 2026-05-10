@@ -161,11 +161,6 @@ const translateModeOptions = ['自然表达', '忠实直译', '商务正式', '�
 const researchDepthOptions = ['标准', '深度', '竞品分析', '资料综述', '行动方案'] as const
 const qaModeOptions = ['逐步讲解', '只给答案', '先提示后答案', '举一反三'] as const
 const dataOutputOptions = ['洞察+表格', '只要结论', '详细分析', '可视化建议', '清洗建议'] as const
-const pptPageOptions = ['6页', '8页', '10页', '12页', '15页', '20页', '25页', '30页'] as const
-const pptAudienceOptions = ['商务汇报', '销售路演', '培训课件', '项目复盘', '产品介绍', '研究报告'] as const
-const pptDesignOptions = ['高端大气', '咨询级', '品牌发布', '视觉叙事', '商务精美', '科技蓝', '极简高级', '发布会风', '数据报告', '培训课件'] as const
-const pptModeOptions = ['PPT', 'PPT视频'] as const
-const pptNarrationOptions = ['开启', '关闭'] as const
 type PptVideoSlide = { index: number; title: string; notes: string }
 type PptVideoEncoderState = {
   encoder?: string
@@ -759,11 +754,6 @@ function App() {
       researchDepth: '标准',
       qaMode: '逐步讲解',
       dataOutput: '洞察+表格',
-      pptPages: '12页',
-      pptAudience: '商务汇报',
-      pptDesign: '高端大气',
-      pptMode: 'PPT',
-      pptNarration: '开启',
     } as Record<string, string>,
   })
 
@@ -1524,12 +1514,12 @@ function App() {
         next.outputFormat = 'pptx'
         next.thinkingMode = 'expert'
         next.temperature = Math.max(next.temperature || 0.7, 0.78)
-        next.capabilityParams = {
-          ...next.capabilityParams,
-          pptMode: next.capabilityParams.pptMode || 'PPT',
-          pptNarration: next.capabilityParams.pptNarration || '开启',
-          pptDesign: next.capabilityParams.pptDesign || '高端大气',
-        }
+        next.capabilityParams = { ...next.capabilityParams }
+        delete next.capabilityParams.pptPages
+        delete next.capabilityParams.pptAudience
+        delete next.capabilityParams.pptDesign
+        delete next.capabilityParams.pptMode
+        delete next.capabilityParams.pptNarration
       }
       if (key === 'research' || key === 'super') {
         if (key === 'super') next.intentMode = 'document'
@@ -1947,10 +1937,10 @@ function App() {
 
     if (capability === 'ppt') {
       return (
-        <div className="capability-row image-tool-row" aria-label="PPT 生成设置">
+        <div className="capability-row image-tool-row" aria-label="PPT AI 定制">
           <span className="image-mode-chip">
             <Presentation size={17} />
-            PPT 生成
+            PPT AI 定制
             <button type="button" title="退出 PPT 生成" onClick={leaveCapabilityMode}><X size={14} /></button>
           </span>
           <label className="capability-button image-reference-button" title="上传文件">
@@ -1958,48 +1948,6 @@ function App() {
             上传文件
             <input type="file" accept={attachmentAccept} multiple onChange={(e) => uploadFiles(e.target.files)} />
           </label>
-          {renderToolbarSelect(
-            'ppt-pages',
-            params.pptPages,
-            pptPageOptions,
-            (value) => updateCapabilityParam('pptPages', value),
-            <List size={17} />,
-            '篇幅',
-          )}
-          {renderToolbarSelect(
-            'ppt-audience',
-            params.pptAudience,
-            pptAudienceOptions,
-            (value) => updateCapabilityParam('pptAudience', value),
-            <Users size={17} />,
-            '受众',
-          )}
-          {renderToolbarSelect(
-            'ppt-design',
-            params.pptDesign,
-            pptDesignOptions,
-            (value) => updateCapabilityParam('pptDesign', value),
-            <Sparkles size={17} />,
-            '设计风格',
-          )}
-          {renderToolbarSelect(
-            'ppt-mode',
-            params.pptMode,
-            pptModeOptions,
-            (value) => updateCapabilityParam('pptMode', value),
-            <Presentation size={17} />,
-            '生成类型',
-          )}
-          {params.pptMode === 'PPT视频' && (
-            renderToolbarSelect(
-              'ppt-narration',
-              params.pptNarration,
-              pptNarrationOptions,
-              (value) => updateCapabilityParam('pptNarration', value),
-              <Volume2 size={17} />,
-              '备注音频',
-            )
-          )}
         </div>
       )
     }
@@ -2047,9 +1995,17 @@ function App() {
     sendingRef.current = true
     setDraft('')
     try {
+      const requestOptions = agentOptions.capability === 'ppt'
+        ? {
+            ...agentOptions,
+            capabilityParams: Object.fromEntries(
+              Object.entries(agentOptions.capabilityParams).filter(([key]) => !key.startsWith('ppt')),
+            ),
+          }
+        : agentOptions
       const job = await request<GenerationJob>('/api/conversations/jobs', {
         method: 'POST',
-        body: JSON.stringify({ content: normalizedContent, conversationId, attachments, options: agentOptions }),
+        body: JSON.stringify({ content: normalizedContent, conversationId, attachments, options: requestOptions }),
       })
       setConversationId(job.conversationId)
       setStreamingMessageId(job.assistantMessageId)
@@ -2091,7 +2047,7 @@ function App() {
       case 'research':
         return `请基于我上传的资料做深入研究和结构化整理：${names}。`
       case 'ppt':
-        return `请基于我上传的资料制作${agentOptions.capabilityParams.pptDesign || '高端大气'}风格的${agentOptions.capabilityParams.pptMode || 'PPT'}：${names}。`
+        return `请基于我上传的资料制作一份由 AI 自主定制的成品级 PPT：${names}。`
       case 'image':
         return `请参考我上传的图片生成新图片：${names}。`
       default:
@@ -5499,7 +5455,7 @@ function App() {
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={handleComposerKeyDown}
               onPaste={(event) => void handleComposerPaste(event)}
-              placeholder={agentOptions.capability === 'image' ? '描述你想要的图片' : agentOptions.capability === 'write' ? '输入主题和写作要求' : agentOptions.capability === 'code' ? '输入“@”唤起常用语，或粘贴代码快速提问' : agentOptions.capability === 'translate' ? '输入要翻译的文本' : agentOptions.capability === 'research' ? '输入主题和报告要求' : agentOptions.capability === 'qa' ? '输入题目，或粘贴拖拽题目图片' : agentOptions.capability === 'data' ? '请输入对于上传数据的任何分析处理要求' : agentOptions.capability === 'super' ? '输入问题或任务' : agentOptions.capability === 'ppt' && agentOptions.capabilityParams.pptMode === 'PPT视频' ? '输入视频主题、受众、时长和演讲风格' : agentOptions.capability === 'ppt' ? '输入主题、受众、汇报目标和参考资料，生成可下载的精美 PPT' : '发消息，粘贴图片，或拖入文件...'}
+              placeholder={agentOptions.capability === 'image' ? '描述你想要的图片' : agentOptions.capability === 'write' ? '输入主题和写作要求' : agentOptions.capability === 'code' ? '输入“@”唤起常用语，或粘贴代码快速提问' : agentOptions.capability === 'translate' ? '输入要翻译的文本' : agentOptions.capability === 'research' ? '输入主题和报告要求' : agentOptions.capability === 'qa' ? '输入题目，或粘贴拖拽题目图片' : agentOptions.capability === 'data' ? '请输入对于上传数据的任何分析处理要求' : agentOptions.capability === 'super' ? '输入问题或任务' : agentOptions.capability === 'ppt' ? '输入主题、资料和目标，AI 将自主定制整套 PPT' : '发消息，粘贴图片，或拖入文件...'}
             />
             {attachments.length > 0 && (
               <div className="attachment-row">

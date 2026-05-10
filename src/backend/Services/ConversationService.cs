@@ -287,10 +287,18 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
             builder.AppendLine();
             builder.AppendLine();
             builder.AppendLine($"能力模式：{request.Options.Capability}");
-            if (request.Options.CapabilityParams is { Count: > 0 })
+            var capabilityParams = request.Options.CapabilityParams ?? new Dictionary<string, string>();
+            if (string.Equals(request.Options.Capability, "ppt", StringComparison.OrdinalIgnoreCase))
+            {
+                capabilityParams = capabilityParams
+                    .Where(x => !x.Key.StartsWith("ppt", StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(x => x.Key, x => x.Value);
+            }
+
+            if (capabilityParams.Count > 0)
             {
                 builder.AppendLine("能力参数：");
-                foreach (var item in request.Options.CapabilityParams)
+                foreach (var item in capabilityParams)
                 {
                     builder.AppendLine($"- {item.Key}: {item.Value}");
                 }
@@ -305,14 +313,10 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
 
             if (string.Equals(request.Options.Capability, "ppt", StringComparison.OrdinalIgnoreCase))
             {
-                var pptMode = request.Options.CapabilityParams?.GetValueOrDefault("pptMode") ?? "PPT";
-                var pages = request.Options.CapabilityParams?.GetValueOrDefault("pptPages") ?? "12页";
-                var narration = request.Options.CapabilityParams?.GetValueOrDefault("pptNarration") ?? "关闭";
-                var design = request.Options.CapabilityParams?.GetValueOrDefault("pptDesign") ?? "高端大气";
                 builder.AppendLine();
                 builder.AppendLine("PPT 生成要求：");
-                builder.AppendLine($"- 目标页数：{pages}，请尽量按该页数规划章节和页面。");
-                builder.AppendLine($"- 设计风格：{design}。这是一份成品级、高端、有视觉主张的 PPT 制作任务，不是普通大纲整理。");
+                builder.AppendLine("- 不预设受众、风格、页数、结构和页面类型；请完全根据用户输入、附件内容和业务目标自行判断。");
+                builder.AppendLine("- 这是一份成品级、有视觉主张的 PPT 制作任务，不是普通大纲整理。");
                 builder.AppendLine("- 这不是普通 Markdown 文档导出，请按[PPT 制作]方式规划页面。");
                 builder.AppendLine("- 必须输出一个 fenced code block，语言标记为 ppt-spec，内容是严格 JSON。不要把 JSON 当作给用户阅读的正文，前端会渲染为 PPT 制作卡片。");
                 builder.AppendLine("```ppt-spec");
@@ -322,6 +326,7 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
                 builder.AppendLine("- 你是在[担任创意总监制作 PPT]，不是[填模板]：先判断内容最有价值的叙事角度，再决定视觉风格、页面节奏、重点图形和信息层级。");
                 builder.AppendLine();
                 builder.AppendLine("## 创意方向");
+                builder.AppendLine("- 每次都要重新定制：自行判断受众、叙事角度、视觉风格、页面数量、节奏和表达形态，不要沿用固定预设。");
                 builder.AppendLine("- 不要照抄固定结构模板。根据材料选择最有冲击力的叙事方式，可以是问题洞察、未来愿景、产品发布、咨询报告、故事线、战役提案或数据叙事。");
                 builder.AppendLine("- 封面必须有明确主张，不要只写项目名；副标题要像高端提案的定位语。");
                 builder.AppendLine("- 可以使用 agenda，但如果会削弱高级感，可以用更自然的章节引导页、场景页或问题页替代。");
@@ -341,21 +346,7 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
                 builder.AppendLine("- imageUrl 字段：如果用户在对话中上传了图片或之前生成了图片，请将对应的图片 URL 填入相关页面的 imageUrl 字段。系统将自动下载并嵌入到幻灯片中，实现图文结合效果。");
                 builder.AppendLine("- 每页 notes 都要写成可直接放入 PPT 备注区的演讲稿，和该页 bullets 一一对应，便于后续 PPT 转视频时音画同步。");
                 builder.AppendLine("- 如果用户提供资料，先提炼资料中的事实、数字、卖点和结构，再制作 PPT 页面，不要泛泛发挥。");
-                if (string.Equals(pptMode, "PPT视频", StringComparison.OrdinalIgnoreCase))
-                {
-                    builder.AppendLine("- 输出适合制作成 PPT 视频的页面规格。");
-                    builder.AppendLine("- 每页 notes 字段必须是可朗读旁白，用于写入 PPT 备注区和生成音频。");
-                    builder.AppendLine("- 给出整支视频的结构节奏、开场、转场和收尾。");
-                    if (string.Equals(narration, "开启", StringComparison.OrdinalIgnoreCase))
-                    {
-                        builder.AppendLine("- “备注/旁白”内容就是可直接配音的演讲稿，语气自然，适合音频朗读。");
-                        builder.AppendLine("- 旁白稿要控制口播节奏，并标注建议语速、停顿和情绪。");
-                    }
-                }
-                else
-                {
-                    builder.AppendLine("- 输出适合导出为 PPT 的页面规格，每页结构清晰，标题短，页面要点精炼。");
-                }
+                builder.AppendLine("- 如果用户明确要求 PPT 视频，请自行规划视频节奏、开场、转场、收尾，并让 notes 成为可直接朗读的旁白稿；否则输出适合导出为 PPT 的页面规格。");
             }
             builder.AppendLine("请严格按照当前能力模式和能力参数处理用户需求。");
         }
@@ -421,7 +412,7 @@ public sealed class ConversationService(AppDbContext db, IAppSettingsService app
             ]),
             "ppt" => string.Join(Environment.NewLine, [
                 "PPT 生成模式执行要求：",
-                $"- 受众场景：{GetParam("pptAudience", "商务汇报")}。",
+                "- 不使用固定受众、固定风格、固定页数或固定模板；由 AI 根据用户需求和资料自行定制。",
                 "- 内容必须适合直接制作 PPT：每页标题有观点、要点有取舍、表达精炼，并包含 layout、bullets、visual、notes 等页面制作信息。",
                 "- 请像创意总监一样组织叙事和视觉，而不是套固定模板；允许高级、醒目、有品牌感的页面节奏。",
                 "- 不要把 PPT 写成普通文章或 Markdown 大纲；必须输出 ppt-spec JSON 规格，后端会按规格生成 PPTX。",

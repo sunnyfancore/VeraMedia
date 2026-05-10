@@ -188,12 +188,7 @@ public sealed class ConversationsController(
             false,
             false,
             Capability: "ppt",
-            CapabilityParams: new Dictionary<string, string>
-            {
-                ["pptMode"] = "PPT",
-                ["pptDesign"] = "高端大气",
-                ["pptAudience"] = "商务汇报"
-            });
+            CapabilityParams: new Dictionary<string, string>());
 
         var builder = new StringBuilder();
         await foreach (var chunk in chatClient.StreamReplyAsync(provider, chatModel, turns, options, cancellationToken))
