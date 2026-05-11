@@ -20,24 +20,19 @@ public sealed class AdminController(
     public async Task<ActionResult<AdminDashboardStatsDto>> Dashboard(CancellationToken cancellationToken)
     {
         var staleBefore = DateTime.UtcNow.AddMinutes(-20);
-        var staleJobsTask = db.GenerationJobs
+        var staleJobs = await db.GenerationJobs
             .CountAsync(x => (x.Status == GenerationJobStatuses.Pending || x.Status == GenerationJobStatuses.Running) && x.UpdatedAt < staleBefore, cancellationToken);
-        var totalUsersTask = db.Users.CountAsync(cancellationToken);
-        var enabledUsersTask = db.Users.CountAsync(x => x.IsEnabled, cancellationToken);
-        var totalConversationsTask = db.Conversations.CountAsync(cancellationToken);
-        var totalJobsTask = db.GenerationJobs.CountAsync(cancellationToken);
-        var pendingJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Pending, cancellationToken);
-        var runningJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Running, cancellationToken);
-        var completedJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Completed, cancellationToken);
-        var failedJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Failed, cancellationToken);
-        var canceledJobsTask = db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Canceled, cancellationToken);
-        var articleAssetsTask = db.Articles.CountAsync(cancellationToken);
-        var imageAssetsTask = db.GeneratedImages.CountAsync(cancellationToken);
-
-        await Task.WhenAll(
-            staleJobsTask, totalUsersTask, enabledUsersTask, totalConversationsTask,
-            totalJobsTask, pendingJobsTask, runningJobsTask, completedJobsTask,
-            failedJobsTask, canceledJobsTask, articleAssetsTask, imageAssetsTask);
+        var totalUsers = await db.Users.CountAsync(cancellationToken);
+        var enabledUsers = await db.Users.CountAsync(x => x.IsEnabled, cancellationToken);
+        var totalConversations = await db.Conversations.CountAsync(cancellationToken);
+        var totalJobs = await db.GenerationJobs.CountAsync(cancellationToken);
+        var pendingJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Pending, cancellationToken);
+        var runningJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Running, cancellationToken);
+        var completedJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Completed, cancellationToken);
+        var failedJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Failed, cancellationToken);
+        var canceledJobs = await db.GenerationJobs.CountAsync(x => x.Status == GenerationJobStatuses.Canceled, cancellationToken);
+        var articleAssets = await db.Articles.CountAsync(cancellationToken);
+        var imageAssets = await db.GeneratedImages.CountAsync(cancellationToken);
 
         var recentFailures = await db.GenerationJobs
             .AsNoTracking()
@@ -113,18 +108,18 @@ public sealed class AdminController(
             .ToList();
 
         return Ok(new AdminDashboardStatsDto(
-            totalUsersTask.Result,
-            enabledUsersTask.Result,
-            totalConversationsTask.Result,
-            totalJobsTask.Result,
-            pendingJobsTask.Result,
-            runningJobsTask.Result,
-            completedJobsTask.Result,
-            failedJobsTask.Result,
-            canceledJobsTask.Result,
-            staleJobsTask.Result,
-            articleAssetsTask.Result,
-            imageAssetsTask.Result,
+            totalUsers,
+            enabledUsers,
+            totalConversations,
+            totalJobs,
+            pendingJobs,
+            runningJobs,
+            completedJobs,
+            failedJobs,
+            canceledJobs,
+            staleJobs,
+            articleAssets,
+            imageAssets,
             recentFailures,
             recentIntents,
             recentAudits));
